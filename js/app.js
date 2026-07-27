@@ -40,7 +40,7 @@ function saveSession(uid){ localStorage.setItem(SESSION_KEY, JSON.stringify(uid)
 
 let db = loadDB();
 let sessionUserId = loadSession();
-let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0 };
+let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[] };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -56,6 +56,37 @@ const CATS = [
 ];
 function iconSVG(cat){
   return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${ICONS[cat]||''}</svg>`;
+}
+
+/* ---------------- MAPA (zonas de Ibagué) ---------------- */
+// Coordenadas aproximadas a nivel de zona (no la dirección exacta del trabajador).
+const IBAGUE_CENTRO = [4.4389, -75.2003];
+const ZONAS = {
+  'Centro': [4.4389, -75.2003],
+  'Norte': [4.4650, -75.1950],
+  'Ambalá': [4.4750, -75.1900],
+  'Sin definir': IBAGUE_CENTRO
+};
+function coordsForZona(zona){
+  if(ZONAS[zona]) return ZONAS[zona];
+  // zona escrita libremente por el trabajador: se ubica cerca del centro,
+  // con un desplazamiento estable (siempre el mismo punto para la misma zona)
+  let hash = 0;
+  for(let i=0;i<(zona||'').length;i++) hash = (hash*31 + zona.charCodeAt(i)) % 1000;
+  const jitter = (hash/1000 - 0.5) * 0.03;
+  return [IBAGUE_CENTRO[0]+jitter, IBAGUE_CENTRO[1]-jitter];
+}
+let mapPerfil=null, mapBuscar=null;
+function tileLayer(map){
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18, attribution: '© OpenStreetMap'
+  }).addTo(map);
+}
+function pinIcon(color){
+  return L.divIcon({
+    className:'', html:`<div style="width:16px;height:16px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);"></div>`,
+    iconSize:[16,16], iconAnchor:[8,16]
+  });
 }
 
 function currentUser(){ return db.users.find(u=>u.id===sessionUserId) || null; }
@@ -195,8 +226,29 @@ function renderBuscar(){
 
   const box = document.getElementById('buscar-results');
   box.innerHTML = results.length ? results.map(workerCardHTML).join('') : `<div class="empty-note">No encontramos trabajadores con ese criterio. Prueba con otra categoría o término.</div>`;
+  state.resultadosBuscar = results;
+  if(state.vistaBuscar==='mapa') initMapaBuscar(results);
 }
 function setCatFiltro(cat){ state.catFiltro = cat || null; renderBuscar(); }
+function setVistaBuscar(vista){
+  state.vistaBuscar = vista;
+  document.getElementById('btn-vista-lista').classList.toggle('on', vista==='lista');
+  document.getElementById('btn-vista-mapa').classList.toggle('on', vista==='mapa');
+  document.getElementById('buscar-results').classList.toggle('hidden', vista==='mapa');
+  document.getElementById('buscar-mapa-box').classList.toggle('hidden', vista!=='mapa');
+  if(vista==='mapa') initMapaBuscar(state.resultadosBuscar||[]);
+}
+function initMapaBuscar(results){
+  if(mapBuscar){ mapBuscar.remove(); mapBuscar = null; }
+  mapBuscar = L.map('buscar-mapa-box', {zoomControl:true, attributionControl:false}).setView(IBAGUE_CENTRO, 12);
+  tileLayer(mapBuscar);
+  results.forEach(w=>{
+    const coords = coordsForZona(w.zona);
+    L.marker(coords, {icon:pinIcon('#1C2B39')}).addTo(mapBuscar)
+      .bindPopup(`<b>${w.nombre}</b><br>${w.categoria} · ${w.zona}<br><a href="#" onclick="verPerfil('${w.id}'); return false;">Ver perfil →</a>`);
+  });
+  setTimeout(()=>mapBuscar && mapBuscar.invalidateSize(), 80);
+}
 
 /* ---------------- PERFIL ---------------- */
 function verPerfil(workerId){
@@ -225,13 +277,29 @@ function verPerfil(workerId){
         </div>
       </div>
       <div>
-        <div class="card">
+        <div class="card" style="margin-bottom:16px;">
           <h3 style="font-size:14px; margin-bottom:12px;">Solicitar este servicio</h3>
           <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:16px;">Elige un día y una hora para que ${w.nombre.split(' ')[0]} confirme tu cita.</p>
           <button class="btn btn-primary" style="width:100%;" onclick="irAAgendar('${w.id}')">Agendar cita</button>
         </div>
+        <div class="card">
+          <h3 style="font-size:14px; margin-bottom:10px;">Zona de trabajo</h3>
+          <div class="map-box" id="perfil-mapa"></div>
+          <div class="map-caption"><span>${w.zona}, Ibagué</span><span>Ubicación aproximada</span></div>
+        </div>
       </div>
     </div>`;
+  initMapaPerfil(w);
+}
+
+function initMapaPerfil(w){
+  const coords = coordsForZona(w.zona);
+  if(mapPerfil){ mapPerfil.remove(); mapPerfil = null; }
+  mapPerfil = L.map('perfil-mapa', {zoomControl:false, attributionControl:false}).setView(coords, 13);
+  tileLayer(mapPerfil);
+  L.marker(coords, {icon:pinIcon('#E8752C')}).addTo(mapPerfil)
+    .bindPopup(`<b>${w.nombre}</b><br>${w.categoria} · ${w.zona}`);
+  setTimeout(()=>mapPerfil && mapPerfil.invalidateSize(), 80);
 }
 
 function irAAgendar(workerId){
