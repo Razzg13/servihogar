@@ -73,7 +73,7 @@ function addNotificacion(userId, texto){
 
 let db = loadDB();
 let sessionUserId = loadSession();
-let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[] };
+let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -126,9 +126,14 @@ function currentUser(){ return db.users.find(u=>u.id===sessionUserId) || null; }
 function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
 function avg(resenas){ if(!resenas || !resenas.length) return null; return (resenas.reduce((a,r)=>a+r.estrellas,0)/resenas.length).toFixed(1); }
 function fmtCOP(n){ return '$' + Number(n||0).toLocaleString('es-CO'); }
+// Escapa texto de usuario antes de insertarlo en innerHTML (evita XSS almacenado vía nombre, zona, comentarios, mensajes, etc.)
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 /* ---------------- NAV / ROUTING ---------------- */
 function nav(view){
+  state.mobileNavOpen = false;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('v-'+view).classList.add('active');
   window.scrollTo({top:0, behavior:'instant'});
@@ -141,6 +146,20 @@ function nav(view){
   if(view==='admin') renderAdmin();
 }
 
+function toggleMobileNav(){
+  state.mobileNavOpen = !state.mobileNavOpen;
+  renderNav(document.querySelector('.view.active').id.replace('v-',''));
+}
+document.addEventListener('click', e=>{
+  if(!state.mobileNavOpen) return;
+  const links = document.getElementById('navlinks');
+  const toggle = document.getElementById('menu-toggle');
+  if(links && toggle && !links.contains(e.target) && !toggle.contains(e.target)){
+    state.mobileNavOpen = false;
+    renderNav(document.querySelector('.view.active').id.replace('v-',''));
+  }
+});
+
 function renderNav(active){
   const u = currentUser();
   const links = document.getElementById('navlinks');
@@ -152,6 +171,7 @@ function renderNav(active){
   if(u && u.tipo==='trabajador') linkHtml += `<button class="${active==='trabajo'?'on':''}" onclick="nav('trabajo')">Panel trabajador</button>`;
   if(u && u.tipo==='admin') linkHtml += `<button class="${active==='admin'?'on':''}" onclick="nav('admin')">Panel admin</button>`;
   links.innerHTML = linkHtml;
+  links.classList.toggle('open', state.mobileNavOpen);
 
   const notifBtn = u ? `
     <div class="notif-wrap">
@@ -161,7 +181,7 @@ function renderNav(active){
 
   if(u){
     auth.innerHTML = `${notifBtn}
-                       <span class="userchip">Hola, ${u.nombre.split(' ')[0]}</span>
+                       <span class="userchip">Hola, ${esc(u.nombre.split(' ')[0])}</span>
                        <button class="btn btn-ghost" onclick="logout()">Cerrar sesión</button>
                        <button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${loadTheme()==='dark'?'☀️':'🌙'}</button>`;
     renderNotifCount();
@@ -169,6 +189,13 @@ function renderNav(active){
     auth.innerHTML = `<button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${loadTheme()==='dark'?'☀️':'🌙'}</button>
                        <button class="btn btn-ghost" onclick="nav('auth'); switchAuthTab('login')">Ingresar</button>
                        <button class="btn btn-primary" onclick="nav('auth'); switchAuthTab('register')">Crear cuenta</button>`;
+  }
+
+  const toggle = document.getElementById('menu-toggle');
+  if(toggle){
+    toggle.classList.toggle('on', state.mobileNavOpen);
+    toggle.setAttribute('aria-expanded', state.mobileNavOpen ? 'true' : 'false');
+    toggle.setAttribute('aria-label', state.mobileNavOpen ? 'Cerrar menú' : 'Abrir menú');
   }
 }
 
@@ -188,7 +215,7 @@ function toggleNotifPanel(){
   if(!abrir) return;
   const propias = db.notificaciones.filter(n=>n.userId===u.id).sort((a,b)=>b.fecha.localeCompare(a.fecha));
   panel.innerHTML = propias.length ? propias.map(n=>
-    `<div class="notif-item ${n.leida?'':'unread'}">${n.texto}</div>`
+    `<div class="notif-item ${n.leida?'':'unread'}">${esc(n.texto)}</div>`
   ).join('') : `<div class="notif-item">No tienes notificaciones.</div>`;
   propias.forEach(n=>n.leida=true);
   saveDB(); renderNotifCount();
@@ -215,7 +242,7 @@ function workerCardHTML(w){
   return `<div class="worker-card ticket" onclick="verPerfil('${w.id}')">
     <div class="worker-top">
       <div class="avatar"></div>
-      <div style="flex:1;"><div class="name">${w.nombre} ${w.verificado?'<span class=\"verif-badge\" title=\"Verificado\">✓</span>':''}</div><div class="role">${w.categoria} · ${w.zona}</div></div>
+      <div style="flex:1;"><div class="name">${esc(w.nombre)} ${w.verificado?'<span class=\"verif-badge\" title=\"Verificado\">✓</span>':''}</div><div class="role">${esc(w.categoria)} · ${esc(w.zona)}</div></div>
       ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
     </div>
     <div class="perf"></div>
@@ -324,6 +351,15 @@ function renderBuscar(){
 
   const box = document.getElementById('buscar-results');
   box.innerHTML = results.length ? results.map(workerCardHTML).join('') : `<div class="empty-note">No encontramos trabajadores con ese criterio. Prueba con otra categoría o término.</div>`;
+  const summary = document.getElementById('buscar-summary');
+  if(summary){
+    const tarifas = results.map(w=>Number(w.tarifa)||0).filter(Boolean);
+    const minTarifa = tarifas.length ? Math.min(...tarifas) : 0;
+    const verificados = results.filter(w=>w.verificado).length;
+    summary.innerHTML = `<span>${results.length} ${results.length===1?'resultado':'resultados'}</span>
+      <span>${verificados} verificados</span>
+      <span>${minTarifa ? 'Desde '+fmtCOP(minTarifa) : 'Sin tarifas'}</span>`;
+  }
   state.resultadosBuscar = results;
   if(state.vistaBuscar==='mapa') initMapaBuscar(results);
 }
@@ -343,7 +379,7 @@ function initMapaBuscar(results){
   results.forEach(w=>{
     const coords = coordsForZona(w.zona);
     L.marker(coords, {icon:pinIcon('#1C2B39')}).addTo(mapBuscar)
-      .bindPopup(`<b>${w.nombre}</b><br>${w.categoria} · ${w.zona}<br><a href="#" onclick="verPerfil('${w.id}'); return false;">Ver perfil →</a>`);
+      .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}<br><a href="#" onclick="verPerfil('${w.id}'); return false;">Ver perfil →</a>`);
   });
   setTimeout(()=>mapBuscar && mapBuscar.invalidateSize(), 80);
 }
@@ -362,31 +398,31 @@ function verPerfil(workerId){
         <div class="card">
           <div class="profile-header">
             <div class="avatar"></div>
-            <div style="flex:1;"><h2>${w.nombre} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''}</h2><div class="role">${w.categoria.toUpperCase()} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
+            <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
             ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
           </div>
           <div class="spec-sheet">
             <div class="spec-item"><div class="k">Calificación</div><div class="v">${rating || '—'}</div></div>
             <div class="spec-item"><div class="k">Trabajos hechos</div><div class="v">${w.resenas.length}</div></div>
-            <div class="spec-item"><div class="k">Zona</div><div class="v">${w.zona}</div></div>
+            <div class="spec-item"><div class="k">Zona</div><div class="v">${esc(w.zona)}</div></div>
             <div class="spec-item"><div class="k">Tarifa desde</div><div class="v">${fmtCOP(w.tarifa)}</div></div>
           </div>
           <h3 style="font-size:14px; margin-bottom:8px;">Servicios que ofrece</h3>
-          <div class="chip-row">${w.servicios.length ? w.servicios.map(s=>`<span class="chip">${s}</span>`).join('') : '<span class="chip">Aún no ha agregado servicios</span>'}</div>
+          <div class="chip-row">${w.servicios.length ? w.servicios.map(s=>`<span class="chip">${esc(s)}</span>`).join('') : '<span class="chip">Aún no ha agregado servicios</span>'}</div>
           <h3 style="font-size:14px; margin-bottom:4px;">Comentarios</h3>
-          ${w.resenas.length ? w.resenas.map(r=>`<div class="review"><div class="stars">${'★'.repeat(r.estrellas)}${'☆'.repeat(5-r.estrellas)}</div><p>${r.comentario}</p><div class="who">— ${r.cliente}</div></div>`).join('') : '<p style="font-size:13px;color:var(--ink-soft);">Todavía no tiene comentarios.</p>'}
+          ${w.resenas.length ? w.resenas.map(r=>`<div class="review"><div class="stars">${'★'.repeat(r.estrellas)}${'☆'.repeat(5-r.estrellas)}</div><p>${esc(r.comentario)}</p><div class="who">— ${esc(r.cliente)}</div></div>`).join('') : '<p style="font-size:13px;color:var(--ink-soft);">Todavía no tiene comentarios.</p>'}
         </div>
       </div>
       <div>
         <div class="card" style="margin-bottom:16px;">
           <h3 style="font-size:14px; margin-bottom:12px;">Solicitar este servicio</h3>
-          <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:16px;">Elige un día y una hora para que ${w.nombre.split(' ')[0]} confirme tu cita.</p>
+          <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:16px;">Elige un día y una hora para que ${esc(w.nombre.split(' ')[0])} confirme tu cita.</p>
           <button class="btn btn-primary" style="width:100%;" onclick="irAAgendar('${w.id}')">Agendar cita</button>
         </div>
         <div class="card">
           <h3 style="font-size:14px; margin-bottom:10px;">Zona de trabajo</h3>
           <div class="map-box" id="perfil-mapa"></div>
-          <div class="map-caption"><span>${w.zona}, Ibagué</span><span>Ubicación aproximada</span></div>
+          <div class="map-caption"><span>${esc(w.zona)}, Ibagué</span><span>Ubicación aproximada</span></div>
         </div>
       </div>
     </div>`;
@@ -399,7 +435,7 @@ function initMapaPerfil(w){
   mapPerfil = L.map('perfil-mapa', {zoomControl:false, attributionControl:false}).setView(coords, 13);
   tileLayer(mapPerfil);
   L.marker(coords, {icon:pinIcon('#E8752C')}).addTo(mapPerfil)
-    .bindPopup(`<b>${w.nombre}</b><br>${w.categoria} · ${w.zona}`);
+    .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}`);
   setTimeout(()=>mapPerfil && mapPerfil.invalidateSize(), 80);
 }
 
@@ -410,28 +446,40 @@ function irAAgendar(workerId){
     document.getElementById('auth-msg').innerHTML = `<div class="msg err">Inicia sesión como cliente para agendar una cita.</div>`;
     return;
   }
-  state.workerActual = workerId; state.diaSel=null; state.horaSel=null;
+  state.workerActual = workerId; state.diaSel=null; state.horaSel=null; state.calMonthOffset=0;
   nav('agendar');
   const w = db.users.find(x=>x.id===workerId);
-  document.getElementById('agendar-worker-summary').innerHTML = `<div class="avatar"></div><div><div style="font-weight:600; color:var(--navy); font-size:14px;">${w.nombre}</div><div style="font-size:12px; color:var(--ink-soft);">${w.categoria}</div></div>`;
+  document.getElementById('agendar-worker-summary').innerHTML = `<div class="avatar"></div><div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
   renderCalendario();
   renderSlots();
 }
 
 /* ---------------- AGENDAR ---------------- */
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function calMesObjetivo(){
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth()+state.calMonthOffset, 1);
+}
+function cambiarMesCalendario(delta){
+  if(state.calMonthOffset+delta < 0) return;
+  state.calMonthOffset += delta;
+  state.diaSel = null;
+  renderCalendario();
+}
 function renderCalendario(){
   const now = new Date();
-  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  document.getElementById('cal-month').textContent = `${meses[now.getMonth()]} ${now.getFullYear()}`;
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  let startWeekday = firstDay.getDay(); startWeekday = startWeekday===0?6:startWeekday-1; // Monday-first
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const target = calMesObjetivo();
+  document.getElementById('cal-month').textContent = `${MESES[target.getMonth()]} ${target.getFullYear()}`;
+  document.getElementById('cal-prev').disabled = state.calMonthOffset===0;
+  let startWeekday = target.getDay(); startWeekday = startWeekday===0?6:startWeekday-1; // Monday-first
+  const daysInMonth = new Date(target.getFullYear(), target.getMonth()+1, 0).getDate();
+  const esMesActual = state.calMonthOffset===0;
   const today = now.getDate();
 
   let html = ['L','M','X','J','V','S','D'].map(d=>`<div class="dow">${d}</div>`).join('');
   for(let i=0;i<startWeekday;i++) html += `<div class="day muted"></div>`;
   for(let d=1; d<=daysInMonth; d++){
-    const past = d < today;
+    const past = esMesActual && d < today;
     const sel = state.diaSel===d;
     html += `<div class="day ${past?'muted':''} ${sel?'sel':''}" ${past?'':`onclick="seleccionarDia(${d}, this)"`}>${d}</div>`;
   }
@@ -458,11 +506,12 @@ function confirmarCita(){
   if(!state.diaSel || !state.horaSel){
     msg.innerHTML = `<div class="msg err">Elige un día y una hora antes de confirmar.</div>`; return;
   }
-  const now = new Date();
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const target = calMesObjetivo();
+  const mesesLower = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const anioSufijo = target.getFullYear()!==new Date().getFullYear() ? ` de ${target.getFullYear()}` : '';
   const cita = {
     id: uid('c'), clienteId: sessionUserId, trabajadorId: state.workerActual,
-    fecha: `${state.diaSel} de ${meses[now.getMonth()]}`, hora: state.horaSel,
+    fecha: `${state.diaSel} de ${mesesLower[target.getMonth()]}${anioSufijo}`, hora: state.horaSel,
     estado: 'pendiente', calificacion:null, pago:'pendiente', mensajes:[]
   };
   db.citas.push(cita); saveDB();
@@ -493,7 +542,7 @@ function renderMisCitas(){
         (c.estado==='aceptada'||c.estado==='completada') ? `<button class="btn btn-outline" style="font-size:11px;padding:5px 9px;" onclick="simularPago('${c.id}')">Simular pago</button>` :
         `<span class="status-pill status-pendiente">pendiente</span>`;
       return `<tr>
-        <td>${w?w.nombre:'—'}</td><td>${c.fecha}</td><td>${c.hora}</td>
+        <td>${w?esc(w.nombre):'—'}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
         <td><span class="status-pill status-${c.estado}">${c.estado}</span></td>
         <td>${pagoPill}</td>
         <td><div class="row-actions">${accion}
@@ -555,8 +604,8 @@ function renderChat(){
   const u = currentUser();
   const otro = u.tipo==='cliente' ? db.users.find(x=>x.id===c.trabajadorId) : db.users.find(x=>x.id===c.clienteId);
   panel.innerHTML = `<div class="card">
-    <h3 style="font-size:14px;margin-bottom:10px;">Chat con ${otro.nombre}</h3>
-    <div class="chat-box" id="chat-box">${(c.mensajes||[]).map(m=>`<div class="chat-msg ${m.de===u.id?'mio':''}"><b>${m.de===u.id?'Tú':otro.nombre.split(' ')[0]}:</b> ${m.texto}</div>`).join('') || '<div class="empty-note" style="padding:10px;">Aún no hay mensajes. Escribe el primero.</div>'}</div>
+    <h3 style="font-size:14px;margin-bottom:10px;">Chat con ${esc(otro.nombre)}</h3>
+    <div class="chat-box" id="chat-box">${(c.mensajes||[]).map(m=>`<div class="chat-msg ${m.de===u.id?'mio':''}"><b>${m.de===u.id?'Tú':esc(otro.nombre.split(' ')[0])}:</b> ${esc(m.texto)}</div>`).join('') || '<div class="empty-note" style="padding:10px;">Aún no hay mensajes. Escribe el primero.</div>'}</div>
     <div style="display:flex; gap:8px;">
       <input id="chat-input" placeholder="Escribe un mensaje..." style="flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;" onkeydown="if(event.key==='Enter') enviarMensaje('${citaId}')">
       <button class="btn btn-primary" onclick="enviarMensaje('${citaId}')">Enviar</button>
@@ -613,14 +662,14 @@ function abrirComprobante(citaId){
   </style></head><body>
   <h1>ServiHogar — Orden de servicio</h1>
   <div class="sub">N° ${c.id.toUpperCase()}</div>
-  <div class="row"><span>Cliente</span><b>${cliente.nombre}</b></div>
-  <div class="row"><span>Trabajador</span><b>${w.nombre}</b></div>
-  <div class="row"><span>Categoría</span><b>${w.categoria}</b></div>
-  <div class="row"><span>Zona</span><b>${w.zona}</b></div>
-  <div class="row"><span>Fecha</span><b>${c.fecha}</b></div>
-  <div class="row"><span>Hora</span><b>${c.hora}</b></div>
-  <div class="row"><span>Estado</span><b>${c.estado}</b></div>
-  <div class="row"><span>Pago</span><b>${c.pago}</b></div>
+  <div class="row"><span>Cliente</span><b>${esc(cliente.nombre)}</b></div>
+  <div class="row"><span>Trabajador</span><b>${esc(w.nombre)}</b></div>
+  <div class="row"><span>Categoría</span><b>${esc(w.categoria)}</b></div>
+  <div class="row"><span>Zona</span><b>${esc(w.zona)}</b></div>
+  <div class="row"><span>Fecha</span><b>${esc(c.fecha)}</b></div>
+  <div class="row"><span>Hora</span><b>${esc(c.hora)}</b></div>
+  <div class="row"><span>Estado</span><b>${esc(c.estado)}</b></div>
+  <div class="row"><span>Pago</span><b>${esc(c.pago)}</b></div>
   <div class="stamp">Documento generado por ServiHogar — comprobante no oficial</div>
   <script>window.onload = () => window.print();</script>
   </body></html>`);
@@ -645,7 +694,7 @@ function renderTrabajo(){
       const cli = db.users.find(x=>x.id===c.clienteId);
       let accion = '';
       if(c.estado==='pendiente') accion = `<div class="row-actions"><button class="acc" onclick="responderCita('${c.id}','aceptada')">Aceptar</button><button class="rej" onclick="responderCita('${c.id}','rechazada')">Rechazar</button></div>`;
-      return `<tr><td>${cli?cli.nombre:'—'}</td><td>${c.fecha}</td><td>${c.hora}</td>
+      return `<tr><td>${cli?esc(cli.nombre):'—'}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
         <td><span class="status-pill status-${c.estado}">${c.estado}</span></td>
         <td><span class="status-pill status-${c.pago==='pagado'?'activo':'pendiente'}">${c.pago||'pendiente'}</span></td>
         <td><div class="row-actions">${accion}<button onclick="abrirChat('${c.id}')">Chat</button></div></td></tr>`;
@@ -663,13 +712,13 @@ function renderTrabajo(){
         <h3 style="font-size:15px;">Editar perfil profesional</h3>
         ${verifBadge}
       </div>
-      <div class="field"><label>Categoría</label>
+      <div class="field"><label for="wp-cat">Categoría</label>
         <select id="wp-cat">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
       </div>
-      <div class="field"><label>Zona</label><input id="wp-zona" value="${u.zona}"></div>
-      <div class="field"><label>Años de experiencia</label><input type="number" id="wp-exp" value="${u.experiencia}"></div>
-      <div class="field"><label>Tarifa desde (COP)</label><input type="number" id="wp-tarifa" value="${u.tarifa}"></div>
-      <div class="field"><label>Servicios (separados por coma)</label><input id="wp-servicios" value="${u.servicios.join(', ')}"></div>
+      <div class="field"><label for="wp-zona">Zona</label><input id="wp-zona" value="${esc(u.zona)}"></div>
+      <div class="field"><label for="wp-exp">Años de experiencia</label><input type="number" id="wp-exp" value="${u.experiencia}"></div>
+      <div class="field"><label for="wp-tarifa">Tarifa desde (COP)</label><input type="number" id="wp-tarifa" value="${u.tarifa}"></div>
+      <div class="field"><label for="wp-servicios">Servicios (separados por coma)</label><input id="wp-servicios" value="${esc(u.servicios.join(', '))}"></div>
       <button class="btn btn-primary" onclick="guardarPerfilTrabajador()">Guardar cambios</button>
       <div id="wp-msg"></div>
     </div>`;
@@ -712,7 +761,17 @@ function renderAdmin(){
   if(!u || u.tipo!=='admin'){ document.getElementById('admin-usuarios').innerHTML = `<div class="empty-note">Solo el administrador puede ver este panel.</div>`; return; }
 
   const others = db.users.filter(x=>x.tipo!=='admin');
+  const trabajadores = db.users.filter(x=>x.tipo==='trabajador');
+  const pendientesVerif = trabajadores.filter(x=>x.verificacionPendiente && !x.verificado).length;
+  const reportesAbiertos = db.reportes.filter(r=>r.estado==='abierto').length;
+  const citasPendientes = db.citas.filter(c=>c.estado==='pendiente').length;
   document.getElementById('admin-usuarios').innerHTML = `
+    <div class="admin-summary">
+      <div class="admin-stat"><span>Usuarios</span><b>${others.length}</b><small>${trabajadores.length} trabajadores</small></div>
+      <div class="admin-stat"><span>Verificaciones</span><b>${pendientesVerif}</b><small>Pendientes de revisión</small></div>
+      <div class="admin-stat"><span>Citas</span><b>${db.citas.length}</b><small>${citasPendientes} por responder</small></div>
+      <div class="admin-stat"><span>Reportes</span><b>${reportesAbiertos}</b><small>Abiertos</small></div>
+    </div>
     <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Correo</th><th>Estado</th><th>Verificación</th><th>Acción</th></tr></thead><tbody>
     ${others.map(x=>{
       let verifCell = '—';
@@ -721,7 +780,7 @@ function renderAdmin(){
           : x.verificacionPendiente ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="verificarTrabajador('${x.id}')">Verificar</button>`
           : `<span class="status-pill status-bloqueado">Sin solicitar</span>`;
       }
-      return `<tr><td>${x.nombre}</td><td>${x.tipo}</td><td>${x.correo}</td>
+      return `<tr><td>${esc(x.nombre)}</td><td>${x.tipo}</td><td>${esc(x.correo)}</td>
       <td><span class="status-pill status-${x.estado}">${x.estado}</span></td>
       <td>${verifCell}</td>
       <td><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="toggleEstadoUsuario('${x.id}')">${x.estado==='activo'?'Bloquear':'Activar'}</button></td></tr>`;
@@ -730,7 +789,7 @@ function renderAdmin(){
 
   document.getElementById('admin-reportes').innerHTML = db.reportes.length ? `
     <table><thead><tr><th>De</th><th>Motivo</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
-    ${db.reportes.map(r=>`<tr><td>${r.deNombre}</td><td>${r.motivo}</td><td><span class="status-pill status-${r.estado}">${r.estado}</span></td>
+    ${db.reportes.map(r=>`<tr><td>${esc(r.deNombre)}</td><td>${esc(r.motivo)}</td><td><span class="status-pill status-${r.estado}">${r.estado}</span></td>
       <td>${r.estado==='abierto'?`<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="resolverReporte('${r.id}')">Marcar resuelto</button>`:'—'}</td></tr>`).join('')}
     </tbody></table>` : `<div class="empty-note">No hay reportes registrados.</div>`;
 }
@@ -780,7 +839,7 @@ function renderEstadisticas(){
       <h3 style="font-size:14px; margin-bottom:14px;">Trabajadores más solicitados</h3>
       ${db.citas.length ? topTrabajadores.map(t=>`
         <div class="stat-bar-row">
-          <span class="stat-bar-label">${t.w.nombre}</span>
+          <span class="stat-bar-label">${esc(t.w.nombre)}</span>
           <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(t.n/maxTop)*100}%; background:var(--orange);"></div></div>
           <span class="stat-bar-n">${t.n}</span>
         </div>`).join('') : `<div class="empty-note">Aún no hay citas registradas.</div>`}
