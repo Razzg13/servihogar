@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="ServiHogar conecta clientes con trabajadores verificados de servicios técnicos y domésticos en Ibagué.">
 <title>ServiHogar</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1C2B39">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -52,6 +55,28 @@
           <div class="tk-row"><span class="k">Zona</span><span class="v">Norte, Ibagué</span></div>
         </div>
         <div class="tk-stamp"><span class="badge">✓ Confirmado</span></div>
+      </div>
+    </div>
+
+    <div class="section-title"><h2>Cómo funciona</h2></div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <span class="step-num">1</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10" cy="10" r="6"/><path d="M20.5 20.5l-4.8-4.8"/></svg>
+        <h3>Busca</h3>
+        <p>Filtra por categoría, zona o calificación y compara perfiles verificados en un solo lugar.</p>
+      </div>
+      <div class="step-card">
+        <span class="step-num">2</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><path d="M9 14l2 2 4-4"/></svg>
+        <h3>Agenda</h3>
+        <p>Elige el día y la hora que te sirvan; el trabajador confirma o rechaza tu solicitud.</p>
+      </div>
+      <div class="step-card">
+        <span class="step-num">3</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.6-4.1 6.1-.6z" stroke-linejoin="round"/></svg>
+        <h3>Califica</h3>
+        <p>Después del servicio, deja tu reseña y ayuda a otros clientes a elegir mejor.</p>
       </div>
     </div>
 
@@ -110,7 +135,7 @@
               <option>Jardinería</option><option>Pintura</option><option>Cerrajería</option>
             </select>
           </div>
-          <div class="field"><label for="reg-tarifa">Tarifa desde (COP)</label><input type="number" id="reg-tarifa" placeholder="30000"></div>
+          <div class="field"><label for="reg-tarifa">Tarifa desde (COP)</label><input type="number" id="reg-tarifa" min="0" placeholder="30000"></div>
         </div>
         <button class="btn btn-primary" style="width:100%;" type="submit">Crear cuenta</button>
       </form>

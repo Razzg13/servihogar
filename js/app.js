@@ -321,7 +321,7 @@ function doRegister(e){
   const nuevo = { id: uid('u'), tipo, nombre, correo, password: pass, estado:'activo' };
   if(tipo==='trabajador'){
     nuevo.categoria = document.getElementById('reg-cat').value;
-    nuevo.tarifa = Number(document.getElementById('reg-tarifa').value)||25000;
+    nuevo.tarifa = Math.max(0, Number(document.getElementById('reg-tarifa').value)||25000);
     nuevo.experiencia = 0; nuevo.zona = 'Sin definir';
     nuevo.servicios = []; nuevo.resenas = [];
   }
@@ -509,9 +509,15 @@ function confirmarCita(){
   const target = calMesObjetivo();
   const mesesLower = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const anioSufijo = target.getFullYear()!==new Date().getFullYear() ? ` de ${target.getFullYear()}` : '';
+  const fecha = `${state.diaSel} de ${mesesLower[target.getMonth()]}${anioSufijo}`;
+  const yaOcupado = db.citas.some(c=>c.trabajadorId===state.workerActual && c.fecha===fecha && c.hora===state.horaSel && c.estado!=='rechazada');
+  if(yaOcupado){
+    msg.innerHTML = `<div class="msg err">Ese horario ya está reservado con este trabajador. Elige otro día u hora.</div>`;
+    return;
+  }
   const cita = {
     id: uid('c'), clienteId: sessionUserId, trabajadorId: state.workerActual,
-    fecha: `${state.diaSel} de ${mesesLower[target.getMonth()]}${anioSufijo}`, hora: state.horaSel,
+    fecha, hora: state.horaSel,
     estado: 'pendiente', calificacion:null, pago:'pendiente', mensajes:[]
   };
   db.citas.push(cita); saveDB();
@@ -557,7 +563,10 @@ function renderMisCitas(){
   <div id="chat-panel" style="margin-top:20px;"></div>
   <div id="reportar-panel" style="margin-top:20px;"></div>`;
 }
-function cancelarCita(id){ db.citas = db.citas.filter(c=>c.id!==id); saveDB(); renderMisCitas(); }
+function cancelarCita(id){
+  if(!confirm('¿Seguro que quieres cancelar esta cita? Esta acción no se puede deshacer.')) return;
+  db.citas = db.citas.filter(c=>c.id!==id); saveDB(); renderMisCitas();
+}
 function marcarCompletada(id){ const c = db.citas.find(x=>x.id===id); c.estado='completada'; saveDB(); renderMisCitas(); }
 function simularPago(id){
   const c = db.citas.find(x=>x.id===id); c.pago='pagado'; saveDB();
@@ -716,8 +725,8 @@ function renderTrabajo(){
         <select id="wp-cat">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
       </div>
       <div class="field"><label for="wp-zona">Zona</label><input id="wp-zona" value="${esc(u.zona)}"></div>
-      <div class="field"><label for="wp-exp">Años de experiencia</label><input type="number" id="wp-exp" value="${u.experiencia}"></div>
-      <div class="field"><label for="wp-tarifa">Tarifa desde (COP)</label><input type="number" id="wp-tarifa" value="${u.tarifa}"></div>
+      <div class="field"><label for="wp-exp">Años de experiencia</label><input type="number" id="wp-exp" min="0" value="${u.experiencia}"></div>
+      <div class="field"><label for="wp-tarifa">Tarifa desde (COP)</label><input type="number" id="wp-tarifa" min="0" value="${u.tarifa}"></div>
       <div class="field"><label for="wp-servicios">Servicios (separados por coma)</label><input id="wp-servicios" value="${esc(u.servicios.join(', '))}"></div>
       <button class="btn btn-primary" onclick="guardarPerfilTrabajador()">Guardar cambios</button>
       <div id="wp-msg"></div>
@@ -739,8 +748,8 @@ function guardarPerfilTrabajador(){
   const u = currentUser();
   u.categoria = document.getElementById('wp-cat').value;
   u.zona = document.getElementById('wp-zona').value;
-  u.experiencia = Number(document.getElementById('wp-exp').value)||0;
-  u.tarifa = Number(document.getElementById('wp-tarifa').value)||0;
+  u.experiencia = Math.max(0, Number(document.getElementById('wp-exp').value)||0);
+  u.tarifa = Math.max(0, Number(document.getElementById('wp-tarifa').value)||0);
   u.servicios = document.getElementById('wp-servicios').value.split(',').map(s=>s.trim()).filter(Boolean);
   saveDB();
   document.getElementById('wp-msg').innerHTML = `<div class="msg ok" style="margin-top:12px;">Perfil actualizado.</div>`;

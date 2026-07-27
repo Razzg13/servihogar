@@ -10,7 +10,7 @@
     --navy:#E7ECEE; --navy-deep:#080D12;
   }
   [data-theme="dark"] body{background-image:linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);}
-  [data-theme="dark"] .cat-card, [data-theme="dark"] .worker-card, [data-theme="dark"] .card,
+  [data-theme="dark"] .cat-card, [data-theme="dark"] .worker-card, [data-theme="dark"] .card, [data-theme="dark"] .step-card,
   [data-theme="dark"] table, [data-theme="dark"] .cal, [data-theme="dark"] .form-card,
   [data-theme="dark"] .hero-ticket, [data-theme="dark"] .search-bar input, [data-theme="dark"] .field input,
   [data-theme="dark"] .field select, [data-theme="dark"] .field textarea, [data-theme="dark"] .hero-search input,
@@ -131,6 +131,13 @@
   .benefit-strip div{background:rgba(255,255,255,0.72); border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:var(--shadow); backdrop-filter:blur(10px);}
   .benefit-strip b{display:block; color:var(--navy); font-family:'Space Grotesk'; font-size:14px; margin-bottom:4px;}
   .benefit-strip span{display:block; color:var(--ink-soft); font-size:12.5px;}
+
+  .steps-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:0 0 40px;}
+  .step-card{position:relative; background:#fff; border:1px solid var(--line); border-radius:16px; padding:22px 20px; box-shadow:var(--shadow);}
+  .step-num{position:absolute; top:16px; right:18px; width:24px; height:24px; border-radius:50%; background:rgba(232,117,44,0.14); color:var(--orange-deep); font-family:'IBM Plex Mono'; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;}
+  .step-card .ic{width:26px; height:26px; color:var(--orange); margin-bottom:14px;}
+  .step-card h3{font-size:15px; margin-bottom:6px;}
+  .step-card p{font-size:12.5px; color:var(--ink-soft); line-height:1.5;}
 
   .section-title{display:flex; justify-content:space-between; align-items:baseline; margin:8px 0 16px;}
   .section-title h2{font-size:20px;}
@@ -290,6 +297,7 @@
     .hero{padding:34px 24px; gap:28px;}
     .hero h1{font-size:34px;}
     .benefit-strip{grid-template-columns:1fr;}
+    .steps-grid{grid-template-columns:1fr;}
     .cat-grid{grid-template-columns:repeat(3,1fr);}
     .worker-grid{grid-template-columns:1fr 1fr;}
     .profile-grid{grid-template-columns:1fr;}
