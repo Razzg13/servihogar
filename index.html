@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ServiHogar conecta clientes con trabajadores verificados de servicios técnicos y domésticos en Ibagué.">
 <title>ServiHogar</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="css/styles.css">
@@ -30,6 +31,11 @@
           <input id="home-search" placeholder="¿Qué necesitas? Ej: electricista">
           <button class="btn btn-primary" onclick="buscarDesdeHome()">Buscar</button>
         </div>
+        <div class="trust-row" aria-label="Ventajas de ServiHogar">
+          <span>Perfiles verificados</span>
+          <span>Agenda en minutos</span>
+          <span>Pago simulado seguro</span>
+        </div>
         <div class="stats">
           <div><div class="n" id="stat-workers">0</div><div class="l">Trabajadores</div></div>
           <div><div class="n" id="stat-jobs">0</div><div class="l">Servicios agendados</div></div>
@@ -45,6 +51,21 @@
           <div class="tk-row"><span class="k">Zona</span><span class="v">Norte, Ibagué</span></div>
         </div>
         <div class="tk-stamp"><span class="badge">✓ Confirmado</span></div>
+      </div>
+    </div>
+
+    <div class="benefit-strip">
+      <div>
+        <b>Compara antes de elegir</b>
+        <span>Revisa tarifa, zona, reseñas y servicios sin salir de la búsqueda.</span>
+      </div>
+      <div>
+        <b>Todo queda registrado</b>
+        <span>Citas, chat, pagos simulados, comprobantes y reportes en un solo flujo.</span>
+      </div>
+      <div>
+        <b>Hecho para Ibagué</b>
+        <span>Mapa por zonas y categorías pensadas para necesidades del hogar.</span>
       </div>
     </div>
 
@@ -97,7 +118,12 @@
 
   <!-- BUSCAR -->
   <section class="view" id="v-buscar">
-    <h2 style="margin-bottom:18px;">Buscar trabajadores</h2>
+    <div class="page-head">
+      <div>
+        <h2>Buscar trabajadores</h2>
+        <p>Filtra por oficio, compara calificaciones y agenda con el perfil que mejor encaje.</p>
+      </div>
+    </div>
     <div class="search-bar">
       <input id="buscar-text" placeholder="Buscar por nombre o categoría..." oninput="renderBuscar()">
       <select id="buscar-orden" onchange="renderBuscar()">
