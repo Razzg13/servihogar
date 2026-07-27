@@ -100,6 +100,12 @@
     <h2 style="margin-bottom:18px;">Buscar trabajadores</h2>
     <div class="search-bar">
       <input id="buscar-text" placeholder="Buscar por nombre o categoría..." oninput="renderBuscar()">
+      <select id="buscar-orden" onchange="renderBuscar()">
+        <option value="relevancia">Ordenar: relevancia</option>
+        <option value="precio-asc">Precio: menor a mayor</option>
+        <option value="precio-desc">Precio: mayor a menor</option>
+        <option value="calificacion">Mejor calificados</option>
+      </select>
     </div>
     <div class="chipbar" id="buscar-chips"></div>
     <div class="map-toggle">
@@ -135,6 +141,12 @@
     <div id="miscitas-content"></div>
   </section>
 
+  <!-- FAVORITOS (cliente) -->
+  <section class="view" id="v-favoritos">
+    <h2 style="margin-bottom:18px;">Favoritos</h2>
+    <div id="favoritos-content"></div>
+  </section>
+
   <!-- PANEL TRABAJADOR -->
   <section class="view" id="v-trabajo">
     <div class="tabbar">
@@ -150,9 +162,11 @@
     <div class="tabbar">
       <button id="atab-usuarios" class="on" onclick="switchAdminTab('usuarios')">Usuarios</button>
       <button id="atab-reportes" onclick="switchAdminTab('reportes')">Reportes</button>
+      <button id="atab-estadisticas" onclick="switchAdminTab('estadisticas')">Estadísticas</button>
     </div>
     <div id="admin-usuarios"></div>
     <div id="admin-reportes" class="hidden"></div>
+    <div id="admin-estadisticas" class="hidden"></div>
   </section>
 
 </main>

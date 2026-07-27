@@ -7,12 +7,20 @@ Proyecto académico — Metodología de Diseño de Software, Universidad del Tol
 ## Funcionalidades
 
 - Registro e inicio de sesión (cliente / trabajador)
-- Búsqueda y filtro de trabajadores por categoría
-- Perfil de trabajador con calificaciones y reseñas
+- Búsqueda y filtro de trabajadores por categoría, texto, precio o calificación
+- Mapa de la zona de cada trabajador y mapa de conjunto en Buscar (OpenStreetMap, sin API key)
+- Perfil de trabajador con calificaciones, reseñas y distintivo de verificado
+- Favoritos: los clientes pueden guardar trabajadores
 - Agendamiento de citas (calendario y horarios)
-- Panel del cliente: seguimiento y calificación de citas
-- Panel del trabajador: gestión de solicitudes y perfil profesional
-- Panel de administrador: gestión de usuarios y reportes
+- Chat simple por cita entre cliente y trabajador
+- Pago simulado por cita (sin dinero real)
+- Comprobante de la cita descargable/imprimible
+- Reportar un problema desde una cita
+- Notificaciones dentro de la app (campana con contador)
+- Modo oscuro
+- Panel del cliente: seguimiento, calificación, pago y reporte de citas
+- Panel del trabajador: gestión de solicitudes, chat, perfil profesional y solicitud de verificación
+- Panel de administrador: gestión de usuarios, verificación de trabajadores, reportes y estadísticas
 
 ## Estructura del proyecto
 
@@ -45,9 +53,11 @@ y luego entrar a `http://localhost:8000`.
 
 ## Nota técnica
 
-Los datos (usuarios, citas, calificaciones) se guardan en el `localStorage` del
-navegador de cada visitante. No hay backend ni base de datos compartida: es un
-prototipo funcional para fines académicos y de demostración.
+Los datos (usuarios, citas, calificaciones, mensajes, notificaciones) se guardan
+en el `localStorage` del navegador de cada visitante. No hay backend ni base de
+datos compartida: es un prototipo funcional para fines académicos y de
+demostración. El pago y la verificación de identidad son simulados (no hay
+pasarela de pago real ni validación de documentos).
 
 ## Despliegue
 
