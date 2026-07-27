@@ -2,6 +2,20 @@
 const DB_KEY = 'servihogar_db';
 const SESSION_KEY = 'servihogar_session';
 
+const DIAS_SEMANA = ['L','M','X','J','V','S','D']; // lunes-first, igual que el calendario
+const HORAS_DISPONIBLES = ['8:00 am','10:00 am','1:00 pm','3:00 pm','4:30 pm','6:00 pm'];
+// Disponibilidad "abierta": todos los días, todas las horas. Se usa como valor por
+// defecto seguro para cuentas nuevas o antiguas que todavía no configuraron su horario.
+function disponibilidadPorDefecto(){
+  const d = {};
+  DIAS_SEMANA.forEach(k=>d[k]=[...HORAS_DISPONIBLES]);
+  return d;
+}
+function diaSemanaDeFecha(dateObj){
+  const map = ['D','L','M','X','J','V','S']; // Date.getDay(): 0=domingo
+  return map[dateObj.getDay()];
+}
+
 function seedDB(){
   return {
     users: [
@@ -11,17 +25,20 @@ function seedDB(){
         servicios:['Instalaciones eléctricas','Cortos y fallas','Cableado','Iluminación'],
         resenas:[{cliente:'Diana R.', estrellas:5, comentario:'Llegó puntual y dejó todo funcionando el mismo día.'},
                  {cliente:'Andrés T.', estrellas:5, comentario:'Explica bien el problema antes de cobrar.'}],
-        estado:'activo', verificado:true, verificacionPendiente:false},
+        estado:'activo', verificado:true, verificacionPendiente:false,
+        disponibilidad:{L:[...HORAS_DISPONIBLES],M:[...HORAS_DISPONIBLES],X:[...HORAS_DISPONIBLES],J:[...HORAS_DISPONIBLES],V:[...HORAS_DISPONIBLES],S:['8:00 am','10:00 am'],D:[]}},
       {id:'u3', tipo:'trabajador', nombre:'Laura Méndez', correo:'laura@correo.com', password:'1234',
         categoria:'Limpieza', tarifa:28000, experiencia:4, zona:'Centro',
         servicios:['Limpieza profunda','Limpieza de oficinas','Planchado'],
         resenas:[{cliente:'Pedro L.', estrellas:5, comentario:'Muy responsable y detallista.'}],
-        estado:'activo', verificado:true, verificacionPendiente:false},
+        estado:'activo', verificado:true, verificacionPendiente:false,
+        disponibilidad:{L:['8:00 am','10:00 am','1:00 pm','3:00 pm'],M:['8:00 am','10:00 am','1:00 pm','3:00 pm'],X:['8:00 am','10:00 am','1:00 pm','3:00 pm'],J:['8:00 am','10:00 am','1:00 pm','3:00 pm'],V:['8:00 am','10:00 am','1:00 pm','3:00 pm'],S:['8:00 am','10:00 am'],D:[]}},
       {id:'u4', tipo:'trabajador', nombre:'Carlos Duarte', correo:'carlos@correo.com', password:'1234',
         categoria:'Plomería', tarifa:32000, experiencia:8, zona:'Ambalá',
         servicios:['Fugas','Instalación de tubería','Destape de baños'],
         resenas:[{cliente:'Marta G.', estrellas:4, comentario:'Buen trabajo, tardó un poco más de lo esperado.'}],
-        estado:'activo', verificado:false, verificacionPendiente:true},
+        estado:'activo', verificado:false, verificacionPendiente:true,
+        disponibilidad:{L:[...HORAS_DISPONIBLES],M:[...HORAS_DISPONIBLES],X:[...HORAS_DISPONIBLES],J:[...HORAS_DISPONIBLES],V:[...HORAS_DISPONIBLES],S:[],D:[]}},
       {id:'admin', tipo:'admin', nombre:'Administrador', correo:'admin@servihogar.com', password:'admin', estado:'activo'}
     ],
     citas: [],
@@ -38,6 +55,7 @@ function normalizeDB(d){
     if(u.tipo==='trabajador'){
       if(u.verificado===undefined) u.verificado = false;
       if(u.verificacionPendiente===undefined) u.verificacionPendiente = false;
+      if(!u.disponibilidad) u.disponibilidad = disponibilidadPorDefecto();
     }
   });
   d.citas.forEach(c=>{
@@ -223,8 +241,13 @@ function toggleNotifPanel(){
 
 /* ---------------- HOME ---------------- */
 function renderHome(){
-  document.getElementById('stat-workers').textContent = db.users.filter(u=>u.tipo==='trabajador').length;
+  const trabajadores = db.users.filter(u=>u.tipo==='trabajador');
+  document.getElementById('stat-workers').textContent = trabajadores.length;
   document.getElementById('stat-jobs').textContent = db.citas.length;
+  const todasResenas = trabajadores.flatMap(w=>w.resenas||[]);
+  document.getElementById('stat-rating').textContent = todasResenas.length
+    ? (todasResenas.reduce((a,r)=>a+r.estrellas,0)/todasResenas.length).toFixed(1)
+    : '—';
 
   document.getElementById('home-cats').innerHTML = CATS.map(c=>
     `<div class="cat-card" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></div>`
@@ -324,6 +347,7 @@ function doRegister(e){
     nuevo.tarifa = Math.max(0, Number(document.getElementById('reg-tarifa').value)||25000);
     nuevo.experiencia = 0; nuevo.zona = 'Sin definir';
     nuevo.servicios = []; nuevo.resenas = [];
+    nuevo.disponibilidad = disponibilidadPorDefecto();
   }
   db.users.push(nuevo); saveDB();
   sessionUserId = nuevo.id; saveSession(nuevo.id);
@@ -342,7 +366,8 @@ function renderBuscar(){
   const q = (document.getElementById('buscar-text').value||'').toLowerCase();
   let results = db.users.filter(u=>u.tipo==='trabajador' && u.estado==='activo');
   if(state.catFiltro) results = results.filter(w=>w.categoria===state.catFiltro);
-  if(q) results = results.filter(w=>w.nombre.toLowerCase().includes(q) || w.categoria.toLowerCase().includes(q));
+  if(q) results = results.filter(w=>w.nombre.toLowerCase().includes(q) || w.categoria.toLowerCase().includes(q)
+    || w.zona.toLowerCase().includes(q) || (w.servicios||[]).some(s=>s.toLowerCase().includes(q)));
 
   const orden = document.getElementById('buscar-orden') ? document.getElementById('buscar-orden').value : 'relevancia';
   if(orden==='precio-asc') results = results.slice().sort((a,b)=>a.tarifa-b.tarifa);
@@ -463,8 +488,9 @@ function calMesObjetivo(){
 function cambiarMesCalendario(delta){
   if(state.calMonthOffset+delta < 0) return;
   state.calMonthOffset += delta;
-  state.diaSel = null;
+  state.diaSel = null; state.horaSel = null;
   renderCalendario();
+  renderSlots();
 }
 function renderCalendario(){
   const now = new Date();
@@ -486,15 +512,29 @@ function renderCalendario(){
   document.getElementById('cal-grid').innerHTML = html;
 }
 function seleccionarDia(d, el){
-  state.diaSel = d;
+  state.diaSel = d; state.horaSel = null;
   document.querySelectorAll('#cal-grid .day').forEach(x=>x.classList.remove('sel'));
   el.classList.add('sel');
+  renderSlots();
 }
 function renderSlots(){
-  const horas = ['8:00 am','10:00 am','1:00 pm','3:00 pm','4:30 pm','6:00 pm'];
-  document.getElementById('slot-grid').innerHTML = horas.map(h=>
-    `<div class="slot ${state.horaSel===h?'sel':''}" onclick="seleccionarHora('${h}', this)">${h}</div>`
-  ).join('');
+  const grid = document.getElementById('slot-grid');
+  if(!state.diaSel){
+    grid.innerHTML = `<div class="empty-note" style="padding:16px 0;">Elige primero un día en el calendario.</div>`;
+    return;
+  }
+  const target = calMesObjetivo();
+  const dia = diaSemanaDeFecha(new Date(target.getFullYear(), target.getMonth(), state.diaSel));
+  const w = db.users.find(x=>x.id===state.workerActual);
+  const disponibles = (w.disponibilidad && w.disponibilidad[dia]) || [];
+  if(!disponibles.length){
+    grid.innerHTML = `<div class="empty-note" style="padding:16px 0;">${esc(w.nombre.split(' ')[0])} no atiende ese día. Elige otro día en el calendario.</div>`;
+    return;
+  }
+  grid.innerHTML = HORAS_DISPONIBLES.map(h=>{
+    const activo = disponibles.includes(h);
+    return `<div class="slot ${state.horaSel===h?'sel':''} ${activo?'':'muted'}" ${activo?`onclick="seleccionarHora('${h}', this)"`:''}>${h}</div>`;
+  }).join('');
 }
 function seleccionarHora(h, el){
   state.horaSel = h;
@@ -510,6 +550,13 @@ function confirmarCita(){
   const mesesLower = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const anioSufijo = target.getFullYear()!==new Date().getFullYear() ? ` de ${target.getFullYear()}` : '';
   const fecha = `${state.diaSel} de ${mesesLower[target.getMonth()]}${anioSufijo}`;
+  const dia = diaSemanaDeFecha(new Date(target.getFullYear(), target.getMonth(), state.diaSel));
+  const w = db.users.find(x=>x.id===state.workerActual);
+  const disponibles = (w.disponibilidad && w.disponibilidad[dia]) || [];
+  if(!disponibles.includes(state.horaSel)){
+    msg.innerHTML = `<div class="msg err">Ese horario ya no está disponible para este trabajador. Elige otro.</div>`;
+    return;
+  }
   const yaOcupado = db.citas.some(c=>c.trabajadorId===state.workerActual && c.fecha===fecha && c.hora===state.horaSel && c.estado!=='rechazada');
   if(yaOcupado){
     msg.innerHTML = `<div class="msg err">Ese horario ya está reservado con este trabajador. Elige otro día u hora.</div>`;
@@ -715,6 +762,8 @@ function renderTrabajo(){
     : u.verificacionPendiente ? `<span class="status-pill status-pendiente">Verificación pendiente</span>`
     : `<button class="btn btn-outline" onclick="solicitarVerificacion()">Solicitar verificación</button>`;
 
+  state.wpDisponibilidad = JSON.parse(JSON.stringify(u.disponibilidad || disponibilidadPorDefecto()));
+
   document.getElementById('work-perfil').innerHTML = `
     <div class="card" style="max-width:520px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
@@ -728,9 +777,27 @@ function renderTrabajo(){
       <div class="field"><label for="wp-exp">Años de experiencia</label><input type="number" id="wp-exp" min="0" value="${u.experiencia}"></div>
       <div class="field"><label for="wp-tarifa">Tarifa desde (COP)</label><input type="number" id="wp-tarifa" min="0" value="${u.tarifa}"></div>
       <div class="field"><label for="wp-servicios">Servicios (separados por coma)</label><input id="wp-servicios" value="${esc(u.servicios.join(', '))}"></div>
+      <div class="field"><label>Disponibilidad semanal</label>
+        <div id="wp-disponibilidad" class="disp-grid">${disponibilidadGridHTML()}</div>
+      </div>
       <button class="btn btn-primary" onclick="guardarPerfilTrabajador()">Guardar cambios</button>
       <div id="wp-msg"></div>
     </div>`;
+}
+function disponibilidadGridHTML(){
+  return DIAS_SEMANA.map(dia=>`
+    <div class="disp-row">
+      <span class="disp-day">${dia}</span>
+      <div class="disp-hours">${HORAS_DISPONIBLES.map(h=>
+        `<button type="button" class="chipbtn sm ${state.wpDisponibilidad[dia].includes(h)?'on':''}" onclick="toggleDisponibilidad('${dia}','${h}')">${h}</button>`
+      ).join('')}</div>
+    </div>`).join('');
+}
+function toggleDisponibilidad(dia, hora){
+  const lista = state.wpDisponibilidad[dia];
+  const i = lista.indexOf(hora);
+  if(i>-1) lista.splice(i,1); else lista.push(hora);
+  document.getElementById('wp-disponibilidad').innerHTML = disponibilidadGridHTML();
 }
 function solicitarVerificacion(){
   const u = currentUser();
@@ -751,6 +818,7 @@ function guardarPerfilTrabajador(){
   u.experiencia = Math.max(0, Number(document.getElementById('wp-exp').value)||0);
   u.tarifa = Math.max(0, Number(document.getElementById('wp-tarifa').value)||0);
   u.servicios = document.getElementById('wp-servicios').value.split(',').map(s=>s.trim()).filter(Boolean);
+  u.disponibilidad = state.wpDisponibilidad;
   saveDB();
   document.getElementById('wp-msg').innerHTML = `<div class="msg ok" style="margin-top:12px;">Perfil actualizado.</div>`;
 }
@@ -797,9 +865,14 @@ function renderAdmin(){
     </tbody></table>`;
 
   document.getElementById('admin-reportes').innerHTML = db.reportes.length ? `
-    <table><thead><tr><th>De</th><th>Motivo</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
-    ${db.reportes.map(r=>`<tr><td>${esc(r.deNombre)}</td><td>${esc(r.motivo)}</td><td><span class="status-pill status-${r.estado}">${r.estado}</span></td>
-      <td>${r.estado==='abierto'?`<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="resolverReporte('${r.id}')">Marcar resuelto</button>`:'—'}</td></tr>`).join('')}
+    <table><thead><tr><th>De</th><th>Cita</th><th>Motivo</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+    ${db.reportes.map(r=>{
+      const cita = db.citas.find(c=>c.id===r.citaId);
+      const trabajador = cita && db.users.find(x=>x.id===cita.trabajadorId);
+      const citaCell = cita ? `${esc(trabajador?trabajador.nombre:'—')}<br><span class="mono" style="font-size:11px;color:var(--ink-soft);">${esc(cita.fecha)} · ${esc(cita.hora)}</span>` : '—';
+      return `<tr><td>${esc(r.deNombre)}</td><td>${citaCell}</td><td>${esc(r.motivo)}</td><td><span class="status-pill status-${r.estado}">${r.estado}</span></td>
+      <td>${r.estado==='abierto'?`<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="resolverReporte('${r.id}')">Marcar resuelto</button>`:'—'}</td></tr>`;
+    }).join('')}
     </tbody></table>` : `<div class="empty-note">No hay reportes registrados.</div>`;
 }
 function toggleEstadoUsuario(id){

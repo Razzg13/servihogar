@@ -176,6 +176,12 @@
   .chipbtn{padding:8px 14px; border-radius:20px; border:1.5px solid var(--line); background:#fff; font-size:12.5px; font-weight:600; color:var(--navy); transition:background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease;}
   .chipbtn:hover{transform:translateY(-1px); border-color:var(--orange);}
   .chipbtn.on{background:var(--orange); border-color:var(--orange); color:#fff;}
+  .chipbtn.sm{padding:5px 9px; border-radius:14px; font-size:11px;}
+
+  .disp-grid{display:flex; flex-direction:column; gap:8px;}
+  .disp-row{display:flex; align-items:center; gap:8px;}
+  .disp-day{width:16px; flex-shrink:0; font-family:'IBM Plex Mono'; font-size:11px; font-weight:700; color:var(--ink-soft);}
+  .disp-hours{display:flex; flex-wrap:wrap; gap:6px;}
   .results-summary{display:flex; flex-wrap:wrap; gap:8px; margin:-8px 0 18px;}
   .results-summary span{background:rgba(255,255,255,0.78); border:1px solid var(--line); border-radius:20px; color:var(--ink-soft); font-family:'IBM Plex Mono'; font-size:11px; font-weight:600; padding:5px 9px;}
   .empty-note{color:var(--ink-soft); font-size:13.5px; padding:30px 0; text-align:center;}
@@ -234,8 +240,9 @@
   .cal-grid .day.muted{color:#C7CBCA; cursor:default;}
   .cal-grid .day.sel{background:var(--orange); color:#fff; font-weight:600;}
   .slot-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:22px;}
-  .slot{background:#fff; border:1.5px solid var(--line); border-radius:10px; padding:11px 4px; text-align:center; font-family:'IBM Plex Mono'; font-size:13px; font-weight:600; color:var(--navy);}
+  .slot{background:#fff; border:1.5px solid var(--line); border-radius:10px; padding:11px 4px; text-align:center; font-family:'IBM Plex Mono'; font-size:13px; font-weight:600; color:var(--navy); cursor:pointer;}
   .slot.sel{background:var(--navy); border-color:var(--navy); color:#fff;}
+  .slot.muted{color:#C7CBCA; cursor:default; opacity:0.6;}
 
   /* TABLES / DASHBOARD */
   table{width:100%; border-collapse:collapse; background:#fff; border-radius:14px; overflow:hidden; border:1px solid var(--line); box-shadow:var(--shadow);}
