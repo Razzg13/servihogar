@@ -89,6 +89,27 @@ function addNotificacion(userId, texto){
   saveDB();
 }
 
+// Aviso flotante para confirmar acciones importantes (además del panel de campana).
+// mensaje se inserta como texto plano (textContent), nunca como HTML.
+function mostrarToast(mensaje, tipo='info'){
+  const stack = document.getElementById('toast-stack');
+  if(!stack) return;
+  const iconos = {ok:'✓', err:'⚠', info:'🔔'};
+  const el = document.createElement('div');
+  el.className = `toast ${tipo}`;
+  const ic = document.createElement('span');
+  ic.className = 'toast-ic';
+  ic.textContent = iconos[tipo] || iconos.info;
+  const txt = document.createElement('span');
+  txt.textContent = mensaje;
+  el.appendChild(ic); el.appendChild(txt);
+  stack.appendChild(el);
+  setTimeout(()=>{
+    el.classList.add('out');
+    setTimeout(()=>el.remove(), 220);
+  }, 3500);
+}
+
 let db = loadDB();
 let sessionUserId = loadSession();
 let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false };
@@ -147,6 +168,14 @@ function fmtCOP(n){ return '$' + Number(n||0).toLocaleString('es-CO'); }
 // Escapa texto de usuario antes de insertarlo en innerHTML (evita XSS almacenado vía nombre, zona, comentarios, mensajes, etc.)
 function esc(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+const AVATAR_PALETTE = ['#3F7D58','#C75F1D','#1C2B39','#5B6EAE','#A6433A','#2F8F94'];
+function avatarHTML(nombre){
+  const n = nombre || '';
+  const iniciales = n.trim().split(/\s+/).slice(0,2).map(p=>p[0]).join('').toUpperCase();
+  let hash = 0;
+  for(let i=0;i<n.length;i++) hash = (hash*31 + n.charCodeAt(i)) % AVATAR_PALETTE.length;
+  return `<div class="avatar" style="background:${AVATAR_PALETTE[hash]};">${esc(iniciales)}</div>`;
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
@@ -295,7 +324,7 @@ function workerCardHTML(w){
   const esFav = u && u.tipo==='cliente' && (u.favoritos||[]).includes(w.id);
   return `<div class="worker-card ticket" onclick="verPerfil('${w.id}')">
     <div class="worker-top">
-      <div class="avatar"></div>
+      ${avatarHTML(w.nombre)}
       <div style="flex:1;"><div class="name">${esc(w.nombre)} ${w.verificado?'<span class=\"verif-badge\" title=\"Verificado\">✓</span>':''}</div><div class="role">${esc(w.categoria)} · ${esc(w.zona)}</div></div>
       ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
     </div>
@@ -367,6 +396,9 @@ function doLogin(e){
   sessionUserId = u.id; saveSession(u.id);
   msg.innerHTML='';
   nav(u.tipo==='trabajador' ? 'trabajo' : u.tipo==='admin' ? 'admin' : 'home');
+  const pendientes = db.notificaciones.filter(n=>n.userId===u.id && !n.leida);
+  if(pendientes.length===1) mostrarToast(pendientes[0].texto, 'info');
+  else if(pendientes.length>1) mostrarToast(`Tienes ${pendientes.length} notificaciones nuevas.`, 'info');
   return false;
 }
 function doRegister(e){
@@ -464,7 +496,7 @@ function verPerfil(workerId){
       <div>
         <div class="card">
           <div class="profile-header">
-            <div class="avatar"></div>
+            ${avatarHTML(w.nombre)}
             <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
             ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
           </div>
@@ -516,7 +548,7 @@ function irAAgendar(workerId){
   state.workerActual = workerId; state.diaSel=null; state.horaSel=null; state.calMonthOffset=0;
   nav('agendar');
   const w = db.users.find(x=>x.id===workerId);
-  document.getElementById('agendar-worker-summary').innerHTML = `<div class="avatar"></div><div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
+  document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
   renderCalendario();
   renderSlots();
 }
@@ -614,6 +646,7 @@ function confirmarCita(){
   const trabajador = db.users.find(x=>x.id===cita.trabajadorId);
   addNotificacion(trabajador.id, `Nueva solicitud de ${cliente.nombre} para el ${cita.fecha} · ${cita.hora}`);
   msg.innerHTML = `<div class="msg ok">✓ Cita enviada. Quedó pendiente de confirmación por parte del trabajador.</div>`;
+  mostrarToast('Cita enviada. Quedó pendiente de confirmación.', 'ok');
   setTimeout(()=>nav('miscitas'), 900);
 }
 
@@ -661,6 +694,7 @@ function simularPago(id){
   const c = db.citas.find(x=>x.id===id); c.pago='pagado'; saveDB();
   const w = db.users.find(x=>x.id===c.trabajadorId);
   addNotificacion(w.id, `Pago simulado recibido por el servicio del ${c.fecha}.`);
+  mostrarToast('Pago simulado registrado.', 'ok');
   (document.getElementById('v-miscitas').classList.contains('active') ? renderMisCitas : renderTrabajo)();
 }
 function abrirCalificar(id){
@@ -748,6 +782,7 @@ function enviarReporte(citaId){
   db.reportes.push({id: uid('r'), deNombre: u.nombre, citaId, motivo, estado:'abierto'});
   saveDB();
   document.getElementById('reportar-panel').innerHTML = `<div class="msg ok">✓ Reporte enviado. El administrador lo revisará pronto.</div>`;
+  mostrarToast('Reporte enviado.', 'ok');
 }
 
 /* ---------------- COMPROBANTE (imprimir / descargar) ---------------- */
@@ -857,6 +892,7 @@ function responderCita(id, estado){
   const cliente = db.users.find(x=>x.id===c.clienteId);
   const w = db.users.find(x=>x.id===c.trabajadorId);
   addNotificacion(cliente.id, `${w.nombre} ${estado==='aceptada'?'aceptó':'rechazó'} tu cita del ${c.fecha}.`);
+  mostrarToast(estado==='aceptada' ? 'Cita aceptada.' : 'Cita rechazada.', 'ok');
   renderTrabajo();
 }
 function guardarPerfilTrabajador(){
@@ -937,6 +973,7 @@ function verificarTrabajador(id){
   const u = db.users.find(x=>x.id===id);
   u.verificado = true; u.verificacionPendiente = false;
   addNotificacion(u.id, 'Tu perfil fue verificado por el administrador. Ya se muestra el distintivo ✓ Verificado.');
+  mostrarToast(`${u.nombre.split(' ')[0]} fue verificado.`, 'ok');
   saveDB(); renderAdmin();
 }
 function resolverReporte(id){ const r = db.reportes.find(x=>x.id===id); r.estado='resuelto'; saveDB(); renderAdmin(); }
