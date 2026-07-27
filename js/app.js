@@ -150,6 +150,33 @@ function esc(s){
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
+const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin'];
+let suprimirPush = false; // true mientras restauramos una ruta (popstate / carga inicial): no volver a empujar historial
+
+function routeHashFor(view){
+  if((view==='perfil' || view==='agendar') && state.workerActual) return `#/${view}/${state.workerActual}`;
+  return `#/${view}`;
+}
+function parseHash(){
+  const partes = (location.hash || '').replace(/^#\/?/, '').split('/').filter(Boolean);
+  return { view: partes[0] || 'home', param: partes[1] || null };
+}
+// Reconstruye la vista actual a partir de la URL (botón atrás/adelante o carga con un link directo)
+function restoreFromHash(){
+  let { view, param } = parseHash();
+  if(!VISTAS_VALIDAS.includes(view)) view = 'home';
+  suprimirPush = true;
+  if(view==='perfil' && param && db.users.find(x=>x.id===param)){
+    verPerfil(param);
+  } else if(view==='agendar' && param && db.users.find(x=>x.id===param)){
+    irAAgendar(param);
+  } else {
+    nav(view==='perfil'||view==='agendar' ? 'home' : view);
+  }
+  suprimirPush = false;
+}
+window.addEventListener('popstate', restoreFromHash);
+
 function nav(view){
   state.mobileNavOpen = false;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -162,6 +189,10 @@ function nav(view){
   if(view==='favoritos') renderFavoritos();
   if(view==='trabajo') renderTrabajo();
   if(view==='admin') renderAdmin();
+  if(!suprimirPush){
+    const hash = routeHashFor(view);
+    if(location.hash !== hash) history.pushState(null, '', hash);
+  }
 }
 
 function toggleMobileNav(){
@@ -318,6 +349,13 @@ function switchAuthTab(tab){
 function toggleWorkerFields(){
   document.getElementById('worker-fields').classList.toggle('hidden', document.getElementById('reg-tipo').value!=='trabajador');
 }
+function togglePasswordVisibility(id, btn){
+  const input = document.getElementById(id);
+  const mostrar = input.type === 'password';
+  input.type = mostrar ? 'text' : 'password';
+  btn.textContent = mostrar ? '🙈' : '👁';
+  btn.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+}
 function doLogin(e){
   e.preventDefault();
   const email = document.getElementById('login-email').value.trim().toLowerCase();
@@ -337,7 +375,11 @@ function doRegister(e){
   const nombre = document.getElementById('reg-nombre').value.trim();
   const correo = document.getElementById('reg-email').value.trim().toLowerCase();
   const pass = document.getElementById('reg-pass').value;
+  const pass2 = document.getElementById('reg-pass2').value;
   const msg = document.getElementById('auth-msg');
+  if(pass !== pass2){
+    msg.innerHTML = `<div class="msg err">Las contraseñas no coinciden.</div>`; return false;
+  }
   if(db.users.some(u=>u.correo.toLowerCase()===correo)){
     msg.innerHTML = `<div class="msg err">Ya existe una cuenta con ese correo.</div>`; return false;
   }
@@ -608,7 +650,7 @@ function renderMisCitas(){
   </tbody></table>
   <div id="calificar-panel" style="margin-top:20px;"></div>
   <div id="chat-panel" style="margin-top:20px;"></div>
-  <div id="reportar-panel" style="margin-top:20px;"></div>`;
+  <div id="reportar-panel" style="margin-top:20px;" role="status" aria-live="polite"></div>`;
 }
 function cancelarCita(id){
   if(!confirm('¿Seguro que quieres cancelar esta cita? Esta acción no se puede deshacer.')) return;
@@ -687,6 +729,11 @@ function enviarMensaje(citaId){
 /* ---------------- REPORTAR ---------------- */
 function abrirReportar(citaId){
   const panel = document.getElementById('reportar-panel');
+  const yaReportada = db.reportes.some(r=>r.citaId===citaId && r.estado==='abierto');
+  if(yaReportada){
+    panel.innerHTML = `<div class="card"><p style="font-size:13px;color:var(--ink-soft);">Ya enviaste un reporte para esta cita y sigue en revisión. Te avisaremos cuando el administrador lo resuelva.</p></div>`;
+    return;
+  }
   panel.innerHTML = `<div class="card">
     <h3 style="font-size:14px;margin-bottom:10px;">Reportar un problema</h3>
     <textarea id="reporte-motivo" placeholder="Cuéntanos qué pasó..." rows="3" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;margin-bottom:12px;"></textarea>
@@ -696,6 +743,7 @@ function abrirReportar(citaId){
 function enviarReporte(citaId){
   const motivo = document.getElementById('reporte-motivo').value.trim();
   if(!motivo) return;
+  if(db.reportes.some(r=>r.citaId===citaId && r.estado==='abierto')) return;
   const u = currentUser();
   db.reportes.push({id: uid('r'), deNombre: u.nombre, citaId, motivo, estado:'abierto'});
   saveDB();
@@ -781,7 +829,7 @@ function renderTrabajo(){
         <div id="wp-disponibilidad" class="disp-grid">${disponibilidadGridHTML()}</div>
       </div>
       <button class="btn btn-primary" onclick="guardarPerfilTrabajador()">Guardar cambios</button>
-      <div id="wp-msg"></div>
+      <div id="wp-msg" role="status" aria-live="polite"></div>
     </div>`;
 }
 function disponibilidadGridHTML(){
@@ -813,8 +861,13 @@ function responderCita(id, estado){
 }
 function guardarPerfilTrabajador(){
   const u = currentUser();
+  const zona = document.getElementById('wp-zona').value.trim();
+  if(!zona){
+    document.getElementById('wp-msg').innerHTML = `<div class="msg err" style="margin-top:12px;">La zona no puede quedar vacía.</div>`;
+    return;
+  }
   u.categoria = document.getElementById('wp-cat').value;
-  u.zona = document.getElementById('wp-zona').value;
+  u.zona = zona;
   u.experiencia = Math.max(0, Number(document.getElementById('wp-exp').value)||0);
   u.tarifa = Math.max(0, Number(document.getElementById('wp-tarifa').value)||0);
   u.servicios = document.getElementById('wp-servicios').value.split(',').map(s=>s.trim()).filter(Boolean);
@@ -930,4 +983,11 @@ function renderEstadisticas(){
 
 /* ---------------- INIT ---------------- */
 applyTheme(loadTheme());
-nav('home');
+if(location.hash){
+  restoreFromHash();
+} else {
+  suprimirPush = true;
+  nav('home');
+  suprimirPush = false;
+  history.replaceState(null, '', '#/home');
+}
