@@ -5,9 +5,6 @@
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ---------------- DATA LAYER ---------------- */
-const DB_KEY = 'servihogar_db';
-const SESSION_KEY = 'servihogar_session';
-
 const DIAS_SEMANA = ['L','M','X','J','V','S','D']; // lunes-first, igual que el calendario
 const HORAS_DISPONIBLES = ['8:00 am','10:00 am','1:00 pm','3:00 pm','4:30 pm','6:00 pm'];
 // Disponibilidad "abierta": todos los días, todas las horas. Se usa como valor por
@@ -22,64 +19,6 @@ function diaSemanaDeFecha(dateObj){
   return map[dateObj.getDay()];
 }
 
-function seedDB(){
-  return {
-    users: [
-      {id:'u1', tipo:'cliente', nombre:'Camila Torres', correo:'camila@correo.com', password:'1234', estado:'activo', favoritos:[]},
-      {id:'u2', tipo:'trabajador', nombre:'Jorge Ramírez', correo:'jorge@correo.com', password:'1234',
-        categoria:'Electricidad', tarifa:35000, experiencia:6, zona:'Norte',
-        servicios:['Instalaciones eléctricas','Cortos y fallas','Cableado','Iluminación'],
-        resenas:[{cliente:'Diana R.', estrellas:5, comentario:'Llegó puntual y dejó todo funcionando el mismo día.'},
-                 {cliente:'Andrés T.', estrellas:5, comentario:'Explica bien el problema antes de cobrar.'}],
-        estado:'activo', verificado:true, verificacionPendiente:false,
-        disponibilidad:{L:[...HORAS_DISPONIBLES],M:[...HORAS_DISPONIBLES],X:[...HORAS_DISPONIBLES],J:[...HORAS_DISPONIBLES],V:[...HORAS_DISPONIBLES],S:['8:00 am','10:00 am'],D:[]}},
-      {id:'u3', tipo:'trabajador', nombre:'Laura Méndez', correo:'laura@correo.com', password:'1234',
-        categoria:'Limpieza', tarifa:28000, experiencia:4, zona:'Centro',
-        servicios:['Limpieza profunda','Limpieza de oficinas','Planchado'],
-        resenas:[{cliente:'Pedro L.', estrellas:5, comentario:'Muy responsable y detallista.'}],
-        estado:'activo', verificado:true, verificacionPendiente:false,
-        disponibilidad:{L:['8:00 am','10:00 am','1:00 pm','3:00 pm'],M:['8:00 am','10:00 am','1:00 pm','3:00 pm'],X:['8:00 am','10:00 am','1:00 pm','3:00 pm'],J:['8:00 am','10:00 am','1:00 pm','3:00 pm'],V:['8:00 am','10:00 am','1:00 pm','3:00 pm'],S:['8:00 am','10:00 am'],D:[]}},
-      {id:'u4', tipo:'trabajador', nombre:'Carlos Duarte', correo:'carlos@correo.com', password:'1234',
-        categoria:'Plomería', tarifa:32000, experiencia:8, zona:'Ambalá',
-        servicios:['Fugas','Instalación de tubería','Destape de baños'],
-        resenas:[{cliente:'Marta G.', estrellas:4, comentario:'Buen trabajo, tardó un poco más de lo esperado.'}],
-        estado:'activo', verificado:false, verificacionPendiente:true,
-        disponibilidad:{L:[...HORAS_DISPONIBLES],M:[...HORAS_DISPONIBLES],X:[...HORAS_DISPONIBLES],J:[...HORAS_DISPONIBLES],V:[...HORAS_DISPONIBLES],S:[],D:[]}},
-      {id:'admin', tipo:'admin', nombre:'Administrador', correo:'admin@servihogar.com', password:'admin', estado:'activo'}
-    ],
-    citas: [],
-    reportes: [],
-    notificaciones: []
-  };
-}
-
-// Rellena campos nuevos en datos que ya existían en el navegador (versiones anteriores)
-function normalizeDB(d){
-  if(!d.notificaciones) d.notificaciones = [];
-  d.users.forEach(u=>{
-    if(u.tipo==='cliente' && !u.favoritos) u.favoritos = [];
-    if(u.tipo==='trabajador'){
-      if(u.verificado===undefined) u.verificado = false;
-      if(u.verificacionPendiente===undefined) u.verificacionPendiente = false;
-      if(!u.disponibilidad) u.disponibilidad = disponibilidadPorDefecto();
-    }
-  });
-  d.citas.forEach(c=>{
-    if(!c.pago) c.pago = 'pendiente';
-    if(!c.mensajes) c.mensajes = [];
-  });
-  return d;
-}
-
-function loadDB(){
-  const raw = localStorage.getItem(DB_KEY);
-  if(!raw){ const d = seedDB(); localStorage.setItem(DB_KEY, JSON.stringify(d)); return d; }
-  return normalizeDB(JSON.parse(raw));
-}
-function saveDB(){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
-function loadSession(){ return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
-function saveSession(uid){ localStorage.setItem(SESSION_KEY, JSON.stringify(uid)); }
-
 const THEME_KEY = 'servihogar_theme';
 function loadTheme(){ return localStorage.getItem(THEME_KEY) || 'light'; }
 function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); }
@@ -90,9 +29,8 @@ function toggleTheme(){
   if(btn) btn.textContent = next==='dark' ? '☀️' : '🌙';
 }
 
-function addNotificacion(userId, texto){
-  db.notificaciones.push({id: uid('n'), userId, texto, leida:false, fecha: new Date().toISOString()});
-  saveDB();
+async function addNotificacion(userId, texto){
+  await sb.from('notificaciones').insert({ user_id: userId, texto });
 }
 
 // Aviso flotante para confirmar acciones importantes (además del panel de campana).
@@ -116,7 +54,6 @@ function mostrarToast(mensaje, tipo='info'){
   }, 3500);
 }
 
-let db = loadDB();
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
 let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false };
@@ -220,12 +157,16 @@ async function obtenerPerfiles(ids){
   const unicos = [...new Set(ids.filter(Boolean))];
   return Promise.all(unicos.map(id=>obtenerPerfil(id)));
 }
-function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
 function avg(resenas){ if(!resenas || !resenas.length) return null; return (resenas.reduce((a,r)=>a+r.estrellas,0)/resenas.length).toFixed(1); }
 function fmtCOP(n){ return '$' + Number(n||0).toLocaleString('es-CO'); }
 // Escapa texto de usuario antes de insertarlo en innerHTML (evita XSS almacenado vía nombre, zona, comentarios, mensajes, etc.)
 function esc(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// Mapea una fila de la tabla `citas` (snake_case) al formato que ya usa el resto de la app
+function normalizarCita(c){
+  if(!c) return null;
+  return { ...c, clienteId: c.cliente_id, trabajadorId: c.trabajador_id };
 }
 const AVATAR_PALETTE = ['#3F7D58','#C75F1D','#1C2B39','#5B6EAE','#A6433A','#2F8F94'];
 function avatarHTML(nombre){
@@ -335,33 +276,38 @@ function renderNav(active){
   }
 }
 
-function renderNotifCount(){
+async function renderNotifCount(){
   const u = currentUser(); if(!u) return;
-  const pendientes = db.notificaciones.filter(n=>n.userId===u.id && !n.leida);
+  const { count } = await sb.from('notificaciones').select('id', {count:'exact', head:true}).eq('user_id', u.id).eq('leida', false);
   const badge = document.getElementById('notif-count');
   if(!badge) return;
-  badge.textContent = pendientes.length;
-  badge.classList.toggle('hidden', pendientes.length===0);
+  badge.textContent = count || 0;
+  badge.classList.toggle('hidden', !count);
 }
-function toggleNotifPanel(){
+async function toggleNotifPanel(){
   const u = currentUser(); if(!u) return;
   const panel = document.getElementById('notif-panel');
   const abrir = panel.classList.contains('hidden');
   panel.classList.toggle('hidden');
   if(!abrir) return;
-  const propias = db.notificaciones.filter(n=>n.userId===u.id).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const { data } = await sb.from('notificaciones').select('*').eq('user_id', u.id).order('created_at', {ascending:false});
+  const propias = data || [];
   panel.innerHTML = propias.length ? propias.map(n=>
     `<div class="notif-item ${n.leida?'':'unread'}">${esc(n.texto)}</div>`
   ).join('') : `<div class="notif-item">No tienes notificaciones.</div>`;
-  propias.forEach(n=>n.leida=true);
-  saveDB(); renderNotifCount();
+  const sinLeer = propias.filter(n=>!n.leida).map(n=>n.id);
+  if(sinLeer.length) await sb.from('notificaciones').update({ leida:true }).in('id', sinLeer);
+  renderNotifCount();
 }
 
 /* ---------------- HOME ---------------- */
 async function renderHome(){
-  const trabajadores = await cargarTrabajadores();
+  const [trabajadores, { count: totalCitas }] = await Promise.all([
+    cargarTrabajadores(),
+    sb.from('citas').select('id', { count: 'exact', head: true })
+  ]);
   document.getElementById('stat-workers').textContent = trabajadores.length;
-  document.getElementById('stat-jobs').textContent = db.citas.length;
+  document.getElementById('stat-jobs').textContent = totalCitas || 0;
   const todasResenas = trabajadores.flatMap(w=>w.resenas||[]);
   document.getElementById('stat-rating').textContent = todasResenas.length
     ? (todasResenas.reduce((a,r)=>a+r.estrellas,0)/todasResenas.length).toFixed(1)
@@ -459,9 +405,9 @@ async function doLogin(e){
   }
   msg.innerHTML='';
   nav(currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home');
-  const pendientes = db.notificaciones.filter(n=>n.userId===currentProfile.id && !n.leida);
-  if(pendientes.length===1) mostrarToast(pendientes[0].texto, 'info');
-  else if(pendientes.length>1) mostrarToast(`Tienes ${pendientes.length} notificaciones nuevas.`, 'info');
+  const { data: pendientes } = await sb.from('notificaciones').select('*').eq('user_id', currentProfile.id).eq('leida', false);
+  if(pendientes && pendientes.length===1) mostrarToast(pendientes[0].texto, 'info');
+  else if(pendientes && pendientes.length>1) mostrarToast(`Tienes ${pendientes.length} notificaciones nuevas.`, 'info');
   return false;
 }
 async function doRegister(e){
@@ -715,17 +661,20 @@ async function confirmarCita(){
     msg.innerHTML = `<div class="msg err">Ese horario ya no está disponible para este trabajador. Elige otro.</div>`;
     return;
   }
-  const yaOcupado = db.citas.some(c=>c.trabajadorId===state.workerActual && c.fecha===fecha && c.hora===state.horaSel && c.estado!=='rechazada');
-  if(yaOcupado){
+  const { data: ocupadas } = await sb.from('citas').select('id')
+    .eq('trabajador_id', w.id).eq('fecha', fecha).eq('hora', state.horaSel).neq('estado','rechazada');
+  if(ocupadas && ocupadas.length){
     msg.innerHTML = `<div class="msg err">Ese horario ya está reservado con este trabajador. Elige otro día u hora.</div>`;
     return;
   }
-  const cita = {
-    id: uid('c'), clienteId: sessionUserId, trabajadorId: state.workerActual,
-    fecha, hora: state.horaSel,
-    estado: 'pendiente', calificacion:null, pago:'pendiente', mensajes:[]
-  };
-  db.citas.push(cita); saveDB();
+  const { data: cita, error } = await sb.from('citas').insert({
+    cliente_id: sessionUserId, trabajador_id: w.id,
+    fecha, hora: state.horaSel, estado: 'pendiente', pago: 'pendiente'
+  }).select().single();
+  if(error){
+    msg.innerHTML = `<div class="msg err">No se pudo agendar: ${esc(error.message)}</div>`;
+    return;
+  }
   const cliente = currentUser();
   addNotificacion(w.id, `Nueva solicitud de ${cliente.nombre} para el ${cita.fecha} · ${cita.hora}`);
   msg.innerHTML = `<div class="msg ok">✓ Cita enviada. Quedó pendiente de confirmación por parte del trabajador.</div>`;
@@ -738,7 +687,8 @@ async function renderMisCitas(){
   const u = currentUser();
   const box = document.getElementById('miscitas-content');
   if(!u || u.tipo!=='cliente'){ box.innerHTML = `<div class="empty-note">Inicia sesión como cliente para ver tus citas.</div>`; return; }
-  const propias = db.citas.filter(c=>c.clienteId===u.id);
+  const { data } = await sb.from('citas').select('*').eq('cliente_id', u.id).order('created_at', {ascending:false});
+  const propias = (data||[]).map(normalizarCita);
   if(!propias.length){ box.innerHTML = `<div class="empty-note">Todavía no has agendado ninguna cita. <br><button class="btn btn-primary" style="margin-top:12px;" onclick="nav('buscar')">Buscar trabajadores</button></div>`; return; }
 
   const trabajadores = await obtenerPerfiles(propias.map(c=>c.trabajadorId));
@@ -770,14 +720,18 @@ async function renderMisCitas(){
   <div id="chat-panel" style="margin-top:20px;"></div>
   <div id="reportar-panel" style="margin-top:20px;" role="status" aria-live="polite"></div>`;
 }
-function cancelarCita(id){
+async function cancelarCita(id){
   if(!confirm('¿Seguro que quieres cancelar esta cita? Esta acción no se puede deshacer.')) return;
-  db.citas = db.citas.filter(c=>c.id!==id); saveDB(); renderMisCitas();
+  await sb.from('citas').delete().eq('id', id);
+  renderMisCitas();
 }
-function marcarCompletada(id){ const c = db.citas.find(x=>x.id===id); c.estado='completada'; saveDB(); renderMisCitas(); }
+async function marcarCompletada(id){
+  await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
+  renderMisCitas();
+}
 async function simularPago(id){
-  const c = db.citas.find(x=>x.id===id); c.pago='pagado'; saveDB();
-  const w = await obtenerPerfil(c.trabajadorId);
+  const { data: c } = await sb.from('citas').update({ pago: 'pagado' }).eq('id', id).select().single();
+  const w = await obtenerPerfil(normalizarCita(c).trabajadorId);
   if(w) addNotificacion(w.id, `Pago simulado recibido por el servicio del ${c.fecha}.`);
   mostrarToast('Pago simulado registrado.', 'ok');
   (document.getElementById('v-miscitas').classList.contains('active') ? renderMisCitas : renderTrabajo)();
@@ -797,13 +751,16 @@ function setStars(n){
   document.querySelectorAll('#stars-input span').forEach(s=>s.classList.toggle('on', Number(s.dataset.n)<=n));
 }
 async function enviarCalificacion(citaId){
-  const c = db.citas.find(x=>x.id===citaId);
-  const w = await obtenerPerfil(c.trabajadorId);
+  const { data: citaRaw } = await sb.from('citas').select('trabajador_id').eq('id', citaId).single();
+  if(!citaRaw) return;
   const cliente = currentUser();
   const comentario = document.getElementById('calif-comentario').value.trim() || 'Sin comentarios.';
-  if(w) w.resenas.push({cliente: cliente.nombre, estrellas: state.estrellasSel, comentario});
-  c.calificacion = {estrellas: state.estrellasSel, comentario};
-  saveDB();
+  await sb.from('resenas').insert({
+    worker_id: citaRaw.trabajador_id, cliente_nombre: cliente.nombre,
+    estrellas: state.estrellasSel, comentario
+  });
+  await sb.from('citas').update({ calificacion: { estrellas: state.estrellasSel, comentario } }).eq('id', citaId);
+  invalidarPerfil(citaRaw.trabajador_id);
   renderMisCitas();
 }
 
@@ -814,16 +771,18 @@ function abrirChat(citaId){
 }
 async function renderChat(){
   const citaId = state.chatCitaId;
-  const c = db.citas.find(x=>x.id===citaId);
+  const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
+  const c = normalizarCita(citaRaw);
   const activa = document.querySelector('.view.active').id;
   const panel = document.getElementById(activa==='v-trabajo' ? 'chat-panel-work' : 'chat-panel');
   if(!panel || !c) return;
   const u = currentUser();
   const otro = await obtenerPerfil(u.tipo==='cliente' ? c.trabajadorId : c.clienteId);
   if(!otro){ panel.innerHTML = `<div class="empty-note">No encontramos a la otra persona de esta cita.</div>`; return; }
+  const { data: mensajes } = await sb.from('mensajes').select('*').eq('cita_id', citaId).order('created_at');
   panel.innerHTML = `<div class="card">
     <h3 style="font-size:14px;margin-bottom:10px;">Chat con ${esc(otro.nombre)}</h3>
-    <div class="chat-box" id="chat-box">${(c.mensajes||[]).map(m=>`<div class="chat-msg ${m.de===u.id?'mio':''}"><b>${m.de===u.id?'Tú':esc(otro.nombre.split(' ')[0])}:</b> ${esc(m.texto)}</div>`).join('') || '<div class="empty-note" style="padding:10px;">Aún no hay mensajes. Escribe el primero.</div>'}</div>
+    <div class="chat-box" id="chat-box">${(mensajes||[]).map(m=>`<div class="chat-msg ${m.de===u.id?'mio':''}"><b>${m.de===u.id?'Tú':esc(otro.nombre.split(' ')[0])}:</b> ${esc(m.texto)}</div>`).join('') || '<div class="empty-note" style="padding:10px;">Aún no hay mensajes. Escribe el primero.</div>'}</div>
     <div style="display:flex; gap:8px;">
       <input id="chat-input" placeholder="Escribe un mensaje..." style="flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;" onkeydown="if(event.key==='Enter') enviarMensaje('${citaId}')">
       <button class="btn btn-primary" onclick="enviarMensaje('${citaId}')">Enviar</button>
@@ -831,15 +790,15 @@ async function renderChat(){
   </div>`;
   const box = document.getElementById('chat-box'); if(box) box.scrollTop = box.scrollHeight;
 }
-function enviarMensaje(citaId){
+async function enviarMensaje(citaId){
   const input = document.getElementById('chat-input');
   const texto = input.value.trim();
   if(!texto) return;
-  const c = db.citas.find(x=>x.id===citaId);
   const u = currentUser();
-  if(!c.mensajes) c.mensajes = [];
-  c.mensajes.push({de:u.id, texto, fecha:new Date().toISOString()});
-  saveDB();
+  const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
+  const c = normalizarCita(citaRaw);
+  if(!c) return;
+  await sb.from('mensajes').insert({ cita_id: citaId, de: u.id, texto });
   const otroId = u.tipo==='cliente' ? c.trabajadorId : c.clienteId;
   addNotificacion(otroId, `Nuevo mensaje de ${u.nombre.split(' ')[0]} sobre la cita del ${c.fecha}.`);
   input.value = '';
@@ -847,10 +806,10 @@ function enviarMensaje(citaId){
 }
 
 /* ---------------- REPORTAR ---------------- */
-function abrirReportar(citaId){
+async function abrirReportar(citaId){
   const panel = document.getElementById('reportar-panel');
-  const yaReportada = db.reportes.some(r=>r.citaId===citaId && r.estado==='abierto');
-  if(yaReportada){
+  const { data: existentes } = await sb.from('reportes').select('id').eq('cita_id', citaId).eq('estado','abierto');
+  if(existentes && existentes.length){
     panel.innerHTML = `<div class="card"><p style="font-size:13px;color:var(--ink-soft);">Ya enviaste un reporte para esta cita y sigue en revisión. Te avisaremos cuando el administrador lo resuelva.</p></div>`;
     return;
   }
@@ -860,23 +819,29 @@ function abrirReportar(citaId){
     <button class="btn btn-primary" onclick="enviarReporte('${citaId}')">Enviar reporte</button>
   </div>`;
 }
-function enviarReporte(citaId){
+async function enviarReporte(citaId){
   const motivo = document.getElementById('reporte-motivo').value.trim();
   if(!motivo) return;
-  if(db.reportes.some(r=>r.citaId===citaId && r.estado==='abierto')) return;
+  const { data: existentes } = await sb.from('reportes').select('id').eq('cita_id', citaId).eq('estado','abierto');
+  if(existentes && existentes.length) return;
   const u = currentUser();
-  db.reportes.push({id: uid('r'), deNombre: u.nombre, citaId, motivo, estado:'abierto'});
-  saveDB();
+  const { error } = await sb.from('reportes').insert({ cita_id: citaId, de_nombre: u.nombre, motivo, estado:'abierto' });
+  if(error){
+    document.getElementById('reportar-panel').innerHTML = `<div class="msg err">No se pudo enviar el reporte: ${esc(error.message)}</div>`;
+    return;
+  }
   document.getElementById('reportar-panel').innerHTML = `<div class="msg ok">✓ Reporte enviado. El administrador lo revisará pronto.</div>`;
   mostrarToast('Reporte enviado.', 'ok');
 }
 
 /* ---------------- COMPROBANTE (imprimir / descargar) ---------------- */
 async function abrirComprobante(citaId){
-  const c = db.citas.find(x=>x.id===citaId);
   // Abrir la ventana antes de esperar los datos: si se abre después de un await
   // el navegador puede bloquearla por no venir "directo" del clic del usuario.
   const win = window.open('', '_blank', 'width=420,height=640');
+  const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
+  const c = normalizarCita(citaRaw);
+  if(!c){ win.close(); return; }
   const [w, cliente] = await Promise.all([obtenerPerfil(c.trabajadorId), obtenerPerfil(c.clienteId)]);
   win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Comprobante ServiHogar</title>
   <style>
@@ -913,7 +878,8 @@ async function renderTrabajo(){
   const u = currentUser();
   if(!u || u.tipo!=='trabajador'){ document.getElementById('work-solicitudes').innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tu panel.</div>`; return; }
 
-  const propias = db.citas.filter(c=>c.trabajadorId===u.id);
+  const { data } = await sb.from('citas').select('*').eq('trabajador_id', u.id).order('created_at', {ascending:false});
+  const propias = (data||[]).map(normalizarCita);
   const clientes = await obtenerPerfiles(propias.map(c=>c.clienteId));
   const clientePorId = new Map(clientes.map(c=>[c && c.id, c]));
   document.getElementById('work-solicitudes').innerHTML = propias.length ? `
@@ -979,9 +945,12 @@ async function solicitarVerificacion(){
   renderTrabajo();
 }
 async function responderCita(id, estado){
-  const c = db.citas.find(x=>x.id===id); c.estado = estado; saveDB();
-  const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
-  if(cliente && w) addNotificacion(cliente.id, `${w.nombre} ${estado==='aceptada'?'aceptó':'rechazó'} tu cita del ${c.fecha}.`);
+  const { data: citaRaw } = await sb.from('citas').update({ estado }).eq('id', id).select().single();
+  const c = normalizarCita(citaRaw);
+  if(c){
+    const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
+    if(cliente && w) addNotificacion(cliente.id, `${w.nombre} ${estado==='aceptada'?'aceptó':'rechazó'} tu cita del ${c.fecha}.`);
+  }
   mostrarToast(estado==='aceptada' ? 'Cita aceptada.' : 'Cita rechazada.', 'ok');
   renderTrabajo();
 }
@@ -1028,13 +997,16 @@ async function renderAdmin(){
   const others = error ? [] : todos.map(normalizarPerfil);
   const trabajadores = others.filter(x=>x.tipo==='trabajador');
   const pendientesVerif = trabajadores.filter(x=>x.verificacionPendiente && !x.verificado).length;
-  const reportesAbiertos = db.reportes.filter(r=>r.estado==='abierto').length;
-  const citasPendientes = db.citas.filter(c=>c.estado==='pendiente').length;
+  const { data: reportesData } = await sb.from('reportes').select('*').order('created_at', {ascending:false});
+  const reportes = (reportesData||[]).map(r=>({ ...r, deNombre: r.de_nombre, citaId: r.cita_id }));
+  const reportesAbiertos = reportes.filter(r=>r.estado==='abierto').length;
+  const { data: todasCitas } = await sb.from('citas').select('estado');
+  const citasPendientes = (todasCitas||[]).filter(c=>c.estado==='pendiente').length;
   document.getElementById('admin-usuarios').innerHTML = `
     <div class="admin-summary">
       <div class="admin-stat"><span>Usuarios</span><b>${others.length}</b><small>${trabajadores.length} trabajadores</small></div>
       <div class="admin-stat"><span>Verificaciones</span><b>${pendientesVerif}</b><small>Pendientes de revisión</small></div>
-      <div class="admin-stat"><span>Citas</span><b>${db.citas.length}</b><small>${citasPendientes} por responder</small></div>
+      <div class="admin-stat"><span>Citas</span><b>${(todasCitas||[]).length}</b><small>${citasPendientes} por responder</small></div>
       <div class="admin-stat"><span>Reportes</span><b>${reportesAbiertos}</b><small>Abiertos</small></div>
     </div>
     <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Correo</th><th>Estado</th><th>Verificación</th><th>Acción</th></tr></thead><tbody>
@@ -1052,11 +1024,17 @@ async function renderAdmin(){
     }).join('')}
     </tbody></table>`;
 
-  document.getElementById('admin-reportes').innerHTML = db.reportes.length ? `
+  const citasDeReportes = await Promise.all(reportes.map(async r=>{
+    const { data } = await sb.from('citas').select('*').eq('id', r.citaId).single();
+    return normalizarCita(data);
+  }));
+  const trabajadoresDeReportes = await obtenerPerfiles(citasDeReportes.filter(Boolean).map(c=>c.trabajadorId));
+  const trabajadorPorId = new Map(trabajadoresDeReportes.map(w=>[w && w.id, w]));
+  document.getElementById('admin-reportes').innerHTML = reportes.length ? `
     <table><thead><tr><th>De</th><th>Cita</th><th>Motivo</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
-    ${db.reportes.map(r=>{
-      const cita = db.citas.find(c=>c.id===r.citaId);
-      const trabajador = cita && db.users.find(x=>x.id===cita.trabajadorId);
+    ${reportes.map((r,i)=>{
+      const cita = citasDeReportes[i];
+      const trabajador = cita && trabajadorPorId.get(cita.trabajadorId);
       const citaCell = cita ? `${esc(trabajador?trabajador.nombre:'—')}<br><span class="mono" style="font-size:11px;color:var(--ink-soft);">${esc(cita.fecha)} · ${esc(cita.hora)}</span>` : '—';
       return `<tr><td>${esc(r.deNombre)}</td><td>${citaCell}</td><td>${esc(r.motivo)}</td><td><span class="status-pill status-${r.estado}">${r.estado}</span></td>
       <td>${r.estado==='abierto'?`<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="resolverReporte('${r.id}')">Marcar resuelto</button>`:'—'}</td></tr>`;
@@ -1080,22 +1058,30 @@ async function verificarTrabajador(id){
   mostrarToast(`${u.nombre.split(' ')[0]} fue verificado.`, 'ok');
   renderAdmin();
 }
-function resolverReporte(id){ const r = db.reportes.find(x=>x.id===id); r.estado='resuelto'; saveDB(); renderAdmin(); }
+async function resolverReporte(id){
+  await sb.from('reportes').update({ estado: 'resuelto' }).eq('id', id);
+  renderAdmin();
+}
 
-function renderEstadisticas(){
+async function renderEstadisticas(){
   const box = document.getElementById('admin-estadisticas');
-  const trabajadores = db.users.filter(u=>u.tipo==='trabajador');
+  const [trabajadores, { data: todasCitas }] = await Promise.all([
+    cargarTrabajadores(),
+    sb.from('citas').select('trabajador_id')
+  ]);
+  const citas = todasCitas || [];
+  const trabajadorPorId = new Map(trabajadores.map(w=>[w.id, w]));
 
   const porCategoria = {};
-  db.citas.forEach(c=>{
-    const w = db.users.find(x=>x.id===c.trabajadorId);
+  citas.forEach(c=>{
+    const w = trabajadorPorId.get(c.trabajador_id);
     if(!w) return;
     porCategoria[w.categoria] = (porCategoria[w.categoria]||0) + 1;
   });
   const maxCat = Math.max(1, ...Object.values(porCategoria));
 
   const porTrabajador = {};
-  db.citas.forEach(c=>{ porTrabajador[c.trabajadorId] = (porTrabajador[c.trabajadorId]||0) + 1; });
+  citas.forEach(c=>{ porTrabajador[c.trabajador_id] = (porTrabajador[c.trabajador_id]||0) + 1; });
   const topTrabajadores = trabajadores
     .map(w=>({w, n: porTrabajador[w.id]||0}))
     .sort((a,b)=>b.n-a.n).slice(0,5);
@@ -1113,7 +1099,7 @@ function renderEstadisticas(){
     </div>
     <div class="card">
       <h3 style="font-size:14px; margin-bottom:14px;">Trabajadores más solicitados</h3>
-      ${db.citas.length ? topTrabajadores.map(t=>`
+      ${citas.length ? topTrabajadores.map(t=>`
         <div class="stat-bar-row">
           <span class="stat-bar-label">${esc(t.w.nombre)}</span>
           <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(t.n/maxTop)*100}%; background:var(--orange);"></div></div>
