@@ -165,7 +165,9 @@
         <option value="precio-desc">Precio: mayor a menor</option>
         <option value="calificacion">Mejor calificados</option>
       </select>
+      <button type="button" class="btn btn-outline" id="btn-cerca-de-mi" onclick="obtenerMiUbicacion()">📍 Cerca de mí</button>
     </div>
+    <div id="ubicacion-msg" role="status" aria-live="polite"></div>
     <div class="chipbar" id="buscar-chips"></div>
     <div class="results-summary" id="buscar-summary"></div>
     <div class="map-toggle">

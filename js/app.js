@@ -56,7 +56,7 @@ function mostrarToast(mensaje, tipo='info'){
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false };
+let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -91,6 +91,42 @@ function coordsForZona(zona){
   for(let i=0;i<(zona||'').length;i++) hash = (hash*31 + zona.charCodeAt(i)) % 1000;
   const jitter = (hash/1000 - 0.5) * 0.03;
   return [IBAGUE_CENTRO[0]+jitter, IBAGUE_CENTRO[1]-jitter];
+}
+// Distancia en km entre dos puntos [lat, lng] (fórmula de Haversine)
+function distanciaKm([lat1, lng1], [lat2, lng2]){
+  const R = 6371;
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLng = (lng2-lng1) * Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function obtenerMiUbicacion(){
+  const msg = document.getElementById('ubicacion-msg');
+  if(!navigator.geolocation){
+    msg.innerHTML = `<div class="msg err">Tu navegador no soporta ubicación.</div>`;
+    return;
+  }
+  const btn = document.getElementById('btn-cerca-de-mi');
+  if(btn){ btn.disabled = true; btn.textContent = 'Ubicando...'; }
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      state.miUbicacion = [pos.coords.latitude, pos.coords.longitude];
+      if(btn){ btn.disabled = false; btn.textContent = '📍 Ubicación activada'; }
+      const orden = document.getElementById('buscar-orden');
+      if(orden && !orden.querySelector('option[value="distancia"]')){
+        const opt = document.createElement('option');
+        opt.value = 'distancia'; opt.textContent = 'Ordenar: más cerca';
+        orden.appendChild(opt);
+      }
+      if(orden) orden.value = 'distancia';
+      msg.innerHTML = `<div class="msg ok">✓ Mostrando distancias desde tu ubicación.</div>`;
+      renderBuscar();
+    },
+    ()=>{
+      if(btn){ btn.disabled = false; btn.textContent = '📍 Cerca de mí'; }
+      msg.innerHTML = `<div class="msg err">No pudimos acceder a tu ubicación. Revisa los permisos del navegador.</div>`;
+    }
+  );
 }
 let mapPerfil=null, mapBuscar=null;
 function tileLayer(map){
@@ -326,6 +362,7 @@ function workerCardHTML(w){
   const rating = avg(w.resenas);
   const u = currentUser();
   const esFav = u && u.tipo==='cliente' && (u.favoritos||[]).includes(w.id);
+  const distancia = state.miUbicacion ? distanciaKm(state.miUbicacion, coordsForZona(w.zona)) : null;
   return `<div class="worker-card ticket" onclick="verPerfil('${w.id}')">
     <div class="worker-top">
       ${avatarHTML(w.nombre)}
@@ -334,7 +371,10 @@ function workerCardHTML(w){
     </div>
     <div class="perf"></div>
     <div class="worker-meta">
-      <div class="rating-pill">${rating ? '★ '+rating : 'Sin calificar'}</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <div class="rating-pill">${rating ? '★ '+rating : 'Sin calificar'}</div>
+        ${distancia!==null ? `<div class="rating-pill dist">📍 ${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</div>` : ''}
+      </div>
       <div class="tarifa">Desde ${fmtCOP(w.tarifa)}</div>
     </div>
   </div>`;
@@ -473,6 +513,11 @@ async function renderBuscar(){
   if(orden==='precio-asc') results = results.slice().sort((a,b)=>a.tarifa-b.tarifa);
   if(orden==='precio-desc') results = results.slice().sort((a,b)=>b.tarifa-a.tarifa);
   if(orden==='calificacion') results = results.slice().sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0));
+  if(orden==='distancia' && state.miUbicacion){
+    results = results.slice().sort((a,b)=>
+      distanciaKm(state.miUbicacion, coordsForZona(a.zona)) - distanciaKm(state.miUbicacion, coordsForZona(b.zona))
+    );
+  }
 
   const box = document.getElementById('buscar-results');
   box.innerHTML = results.length ? results.map(workerCardHTML).join('') : `<div class="empty-note">No encontramos trabajadores con ese criterio. Prueba con otra categoría o término.</div>`;
@@ -499,13 +544,16 @@ function setVistaBuscar(vista){
 }
 function initMapaBuscar(results){
   if(mapBuscar){ mapBuscar.remove(); mapBuscar = null; }
-  mapBuscar = L.map('buscar-mapa-box', {zoomControl:true, attributionControl:false}).setView(IBAGUE_CENTRO, 12);
+  mapBuscar = L.map('buscar-mapa-box', {zoomControl:true, attributionControl:false}).setView(state.miUbicacion || IBAGUE_CENTRO, 12);
   tileLayer(mapBuscar);
   results.forEach(w=>{
     const coords = coordsForZona(w.zona);
     L.marker(coords, {icon:pinIcon('#1C2B39')}).addTo(mapBuscar)
       .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}<br><a href="#" onclick="verPerfil('${w.id}'); return false;">Ver perfil →</a>`);
   });
+  if(state.miUbicacion){
+    L.marker(state.miUbicacion, {icon:pinIcon('#2F8F94')}).addTo(mapBuscar).bindPopup('<b>Tu ubicación</b>');
+  }
   setTimeout(()=>mapBuscar && mapBuscar.invalidateSize(), 80);
 }
 
