@@ -1,3 +1,9 @@
+/* ---------------- SUPABASE ---------------- */
+// Nombre "sb" (no "supabase") a propósito: el bundle del CDN ya deja declarado
+// "supabase" en el ámbito global, y un const propio con ese mismo nombre choca
+// con eso (SyntaxError: Identifier 'supabase' has already been declared).
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 /* ---------------- DATA LAYER ---------------- */
 const DB_KEY = 'servihogar_db';
 const SESSION_KEY = 'servihogar_session';
@@ -111,7 +117,8 @@ function mostrarToast(mensaje, tipo='info'){
 }
 
 let db = loadDB();
-let sessionUserId = loadSession();
+let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
+let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
 let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false };
 
 const ICONS = {
@@ -161,7 +168,23 @@ function pinIcon(color){
   });
 }
 
-function currentUser(){ return db.users.find(u=>u.id===sessionUserId) || null; }
+function currentUser(){ return currentProfile; }
+// Mapea la fila de la tabla `profiles` (snake_case) al formato que ya usa el resto de la app
+function normalizarPerfil(p){
+  if(!p) return null;
+  return {
+    ...p,
+    verificacionPendiente: p.verificacion_pendiente,
+    favoritos: p.favoritos || [],
+    servicios: p.servicios || [],
+    disponibilidad: p.disponibilidad || (p.tipo==='trabajador' ? disponibilidadPorDefecto() : undefined)
+  };
+}
+async function cargarPerfilActual(){
+  if(!sessionUserId){ currentProfile = null; return; }
+  const { data, error } = await sb.from('profiles').select('*').eq('id', sessionUserId).single();
+  currentProfile = error ? null : normalizarPerfil(data);
+}
 function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
 function avg(resenas){ if(!resenas || !resenas.length) return null; return (resenas.reduce((a,r)=>a+r.estrellas,0)/resenas.length).toFixed(1); }
 function fmtCOP(n){ return '$' + Number(n||0).toLocaleString('es-CO'); }
@@ -385,23 +408,28 @@ function togglePasswordVisibility(id, btn){
   btn.textContent = mostrar ? '🙈' : '👁';
   btn.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
 }
-function doLogin(e){
+async function doLogin(e){
   e.preventDefault();
   const email = document.getElementById('login-email').value.trim().toLowerCase();
   const pass = document.getElementById('login-pass').value;
-  const u = db.users.find(u=>u.correo.toLowerCase()===email && u.password===pass);
   const msg = document.getElementById('auth-msg');
-  if(!u){ msg.innerHTML = `<div class="msg err">Correo o contraseña incorrectos.</div>`; return false; }
-  if(u.estado==='bloqueado'){ msg.innerHTML = `<div class="msg err">Esta cuenta está bloqueada. Contacta al administrador.</div>`; return false; }
-  sessionUserId = u.id; saveSession(u.id);
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if(error){ msg.innerHTML = `<div class="msg err">Correo o contraseña incorrectos.</div>`; return false; }
+  sessionUserId = data.user.id;
+  await cargarPerfilActual();
+  if(currentProfile && currentProfile.estado==='bloqueado'){
+    msg.innerHTML = `<div class="msg err">Esta cuenta está bloqueada. Contacta al administrador.</div>`;
+    await sb.auth.signOut(); sessionUserId = null; currentProfile = null;
+    return false;
+  }
   msg.innerHTML='';
-  nav(u.tipo==='trabajador' ? 'trabajo' : u.tipo==='admin' ? 'admin' : 'home');
-  const pendientes = db.notificaciones.filter(n=>n.userId===u.id && !n.leida);
+  nav(currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home');
+  const pendientes = db.notificaciones.filter(n=>n.userId===currentProfile.id && !n.leida);
   if(pendientes.length===1) mostrarToast(pendientes[0].texto, 'info');
   else if(pendientes.length>1) mostrarToast(`Tienes ${pendientes.length} notificaciones nuevas.`, 'info');
   return false;
 }
-function doRegister(e){
+async function doRegister(e){
   e.preventDefault();
   const tipo = document.getElementById('reg-tipo').value;
   const nombre = document.getElementById('reg-nombre').value.trim();
@@ -412,23 +440,39 @@ function doRegister(e){
   if(pass !== pass2){
     msg.innerHTML = `<div class="msg err">Las contraseñas no coinciden.</div>`; return false;
   }
-  if(db.users.some(u=>u.correo.toLowerCase()===correo)){
-    msg.innerHTML = `<div class="msg err">Ya existe una cuenta con ese correo.</div>`; return false;
+  const { data, error } = await sb.auth.signUp({ email: correo, password: pass });
+  if(error){
+    msg.innerHTML = `<div class="msg err">${error.message.includes('registered') ? 'Ya existe una cuenta con ese correo.' : 'No se pudo crear la cuenta. Intenta de nuevo.'}</div>`;
+    return false;
   }
-  const nuevo = { id: uid('u'), tipo, nombre, correo, password: pass, estado:'activo' };
+  if(!data.session){
+    // El proyecto de Supabase tiene "Confirm email" activado: signUp no deja
+    // sesión activa todavía, así que no podemos crear el perfil (RLS lo exige).
+    msg.innerHTML = `<div class="msg ok">✓ Cuenta creada. Revisa tu correo para confirmarla; después vas a poder iniciar sesión.</div>`;
+    return false;
+  }
+  const nuevoPerfil = { id: data.user.id, tipo, nombre, correo, estado:'activo' };
   if(tipo==='trabajador'){
-    nuevo.categoria = document.getElementById('reg-cat').value;
-    nuevo.tarifa = Math.max(0, Number(document.getElementById('reg-tarifa').value)||25000);
-    nuevo.experiencia = 0; nuevo.zona = 'Sin definir';
-    nuevo.servicios = []; nuevo.resenas = [];
-    nuevo.disponibilidad = disponibilidadPorDefecto();
+    nuevoPerfil.categoria = document.getElementById('reg-cat').value;
+    nuevoPerfil.tarifa = Math.max(0, Number(document.getElementById('reg-tarifa').value)||25000);
+    nuevoPerfil.experiencia = 0; nuevoPerfil.zona = 'Sin definir';
+    nuevoPerfil.servicios = []; nuevoPerfil.disponibilidad = disponibilidadPorDefecto();
   }
-  db.users.push(nuevo); saveDB();
-  sessionUserId = nuevo.id; saveSession(nuevo.id);
+  const { error: perfilError } = await sb.from('profiles').insert(nuevoPerfil);
+  if(perfilError){
+    msg.innerHTML = `<div class="msg err">Cuenta creada, pero hubo un problema guardando el perfil: ${esc(perfilError.message)}</div>`;
+    return false;
+  }
+  sessionUserId = data.user.id;
+  await cargarPerfilActual();
   nav(tipo==='trabajador' ? 'trabajo' : 'home');
   return false;
 }
-function logout(){ sessionUserId=null; saveSession(null); nav('home'); }
+async function logout(){
+  await sb.auth.signOut();
+  sessionUserId = null; currentProfile = null;
+  nav('home');
+}
 
 /* ---------------- BUSCAR ---------------- */
 function renderBuscar(){
@@ -1019,12 +1063,19 @@ function renderEstadisticas(){
 }
 
 /* ---------------- INIT ---------------- */
-applyTheme(loadTheme());
-if(location.hash){
-  restoreFromHash();
-} else {
-  suprimirPush = true;
-  nav('home');
-  suprimirPush = false;
-  history.replaceState(null, '', '#/home');
-}
+(async function initApp(){
+  applyTheme(loadTheme());
+  const { data: { session } } = await sb.auth.getSession();
+  if(session){
+    sessionUserId = session.user.id;
+    await cargarPerfilActual();
+  }
+  if(location.hash){
+    restoreFromHash();
+  } else {
+    suprimirPush = true;
+    nav('home');
+    suprimirPush = false;
+    history.replaceState(null, '', '#/home');
+  }
+})();
