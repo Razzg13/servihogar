@@ -4,6 +4,33 @@
 // con eso (SyntaxError: Identifier 'supabase' has already been declared).
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+/* ---------------- REALTIME ---------------- */
+let chatChannel = null;
+let notifChannel = null;
+function cerrarCanalChat(){
+  if(chatChannel){ sb.removeChannel(chatChannel); chatChannel = null; }
+}
+function suscribirChat(citaId){
+  cerrarCanalChat();
+  chatChannel = sb.channel('mensajes-'+citaId)
+    .on('postgres_changes', { event:'INSERT', schema:'public', table:'mensajes', filter:`cita_id=eq.${citaId}` }, ()=>{
+      if(state.chatCitaId===citaId) renderChat();
+    })
+    .subscribe();
+}
+function cerrarCanalNotif(){
+  if(notifChannel){ sb.removeChannel(notifChannel); notifChannel = null; }
+}
+function suscribirNotificaciones(userId){
+  cerrarCanalNotif();
+  notifChannel = sb.channel('notif-'+userId)
+    .on('postgres_changes', { event:'INSERT', schema:'public', table:'notificaciones', filter:`user_id=eq.${userId}` }, payload=>{
+      mostrarToast(payload.new.texto, 'info');
+      renderNotifCount();
+    })
+    .subscribe();
+}
+
 /* ---------------- DATA LAYER ---------------- */
 const DIAS_SEMANA = ['L','M','X','J','V','S','D']; // lunes-first, igual que el calendario
 const HORAS_DISPONIBLES = ['8:00 am','10:00 am','1:00 pm','3:00 pm','4:30 pm','6:00 pm'];
@@ -205,7 +232,10 @@ function normalizarCita(c){
   return { ...c, clienteId: c.cliente_id, trabajadorId: c.trabajador_id };
 }
 const AVATAR_PALETTE = ['#3F7D58','#C75F1D','#1C2B39','#5B6EAE','#A6433A','#2F8F94'];
-function avatarHTML(nombre){
+function avatarHTML(nombre, fotoUrl){
+  if(fotoUrl){
+    return `<div class="avatar" style="padding:0;"><img src="${esc(fotoUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;"></div>`;
+  }
   const n = nombre || '';
   const iniciales = n.trim().split(/\s+/).slice(0,2).map(p=>p[0]).join('').toUpperCase();
   let hash = 0;
@@ -243,6 +273,7 @@ window.addEventListener('popstate', restoreFromHash);
 
 function nav(view){
   state.mobileNavOpen = false;
+  cerrarCanalChat();
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('v-'+view).classList.add('active');
   window.scrollTo({top:0, behavior:'instant'});
@@ -365,7 +396,7 @@ function workerCardHTML(w){
   const distancia = state.miUbicacion ? distanciaKm(state.miUbicacion, coordsForZona(w.zona)) : null;
   return `<div class="worker-card ticket" onclick="verPerfil('${w.id}')">
     <div class="worker-top">
-      ${avatarHTML(w.nombre)}
+      ${avatarHTML(w.nombre, w.foto_url)}
       <div style="flex:1;"><div class="name">${esc(w.nombre)} ${w.verificado?'<span class=\"verif-badge\" title=\"Verificado\">✓</span>':''}</div><div class="role">${esc(w.categoria)} · ${esc(w.zona)}</div></div>
       ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
     </div>
@@ -445,6 +476,7 @@ async function doLogin(e){
   }
   msg.innerHTML='';
   nav(currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home');
+  suscribirNotificaciones(currentProfile.id);
   const { data: pendientes } = await sb.from('notificaciones').select('*').eq('user_id', currentProfile.id).eq('leida', false);
   if(pendientes && pendientes.length===1) mostrarToast(pendientes[0].texto, 'info');
   else if(pendientes && pendientes.length>1) mostrarToast(`Tienes ${pendientes.length} notificaciones nuevas.`, 'info');
@@ -487,11 +519,13 @@ async function doRegister(e){
   sessionUserId = data.user.id;
   await cargarPerfilActual();
   nav(tipo==='trabajador' ? 'trabajo' : 'home');
+  suscribirNotificaciones(sessionUserId);
   return false;
 }
 async function logout(){
   await sb.auth.signOut();
   sessionUserId = null; currentProfile = null;
+  cerrarCanalChat(); cerrarCanalNotif();
   nav('home');
 }
 
@@ -571,7 +605,7 @@ async function verPerfil(workerId){
       <div>
         <div class="card">
           <div class="profile-header">
-            ${avatarHTML(w.nombre)}
+            ${avatarHTML(w.nombre, w.foto_url)}
             <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
             ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
           </div>
@@ -624,7 +658,7 @@ async function irAAgendar(workerId){
   nav('agendar');
   const w = await obtenerPerfil(workerId);
   if(!w){ document.getElementById('agendar-worker-summary').innerHTML = `<div class="empty-note">No encontramos ese trabajador.</div>`; return; }
-  document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
+  document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre, w.foto_url)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
   renderCalendario();
   renderSlots();
 }
@@ -816,6 +850,7 @@ async function enviarCalificacion(citaId){
 function abrirChat(citaId){
   state.chatCitaId = citaId;
   renderChat();
+  suscribirChat(citaId);
 }
 async function renderChat(){
   const citaId = state.chatCitaId;
@@ -946,15 +981,32 @@ async function renderTrabajo(){
 
   const verifBadge = u.verificado ? `<span class="verif-badge">✓ Verificado</span>`
     : u.verificacionPendiente ? `<span class="status-pill status-pendiente">Verificación pendiente</span>`
-    : `<button class="btn btn-outline" onclick="solicitarVerificacion()">Solicitar verificación</button>`;
+    : `<button class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Solicitar verificación</button>`;
 
   state.wpDisponibilidad = JSON.parse(JSON.stringify(u.disponibilidad || disponibilidadPorDefecto()));
 
   document.getElementById('work-perfil').innerHTML = `
+    <div class="card" style="max-width:520px; margin-bottom:16px;">
+      <h3 style="font-size:15px; margin-bottom:14px;">Foto de perfil</h3>
+      <div style="display:flex; align-items:center; gap:14px;">
+        ${avatarHTML(u.nombre, u.foto_url)}
+        <div>
+          <input type="file" id="wp-foto-input" accept="image/*" class="hidden" onchange="subirFotoPerfil()">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('wp-foto-input').click()">Cambiar foto</button>
+          <div id="wp-foto-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </div>
     <div class="card" style="max-width:520px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 style="font-size:15px;">Editar perfil profesional</h3>
         ${verifBadge}
+      </div>
+      <div id="verif-panel" class="hidden" style="margin-bottom:16px; padding:14px; border:1.5px dashed var(--line); border-radius:12px;">
+        <label style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Documento (cédula o certificado)</label>
+        <input type="file" id="wp-doc-input" accept="image/*,application/pdf">
+        <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="solicitarVerificacion()">Enviar solicitud</button>
+        <div id="wp-verif-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
       </div>
       <div class="field"><label for="wp-cat">Categoría</label>
         <select id="wp-cat">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
@@ -985,10 +1037,49 @@ function toggleDisponibilidad(dia, hora){
   if(i>-1) lista.splice(i,1); else lista.push(hora);
   document.getElementById('wp-disponibilidad').innerHTML = disponibilidadGridHTML();
 }
+function mostrarFormularioVerificacion(){
+  const panel = document.getElementById('verif-panel');
+  if(panel) panel.classList.toggle('hidden');
+}
+async function subirFotoPerfil(){
+  const u = currentUser();
+  const input = document.getElementById('wp-foto-input');
+  const file = input && input.files[0];
+  const msgEl = document.getElementById('wp-foto-msg');
+  if(!file) return;
+  if(!file.type.startsWith('image/')){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">Elegí un archivo de imagen.</div>`;
+    return;
+  }
+  const ext = file.name.split('.').pop();
+  const path = `${u.id}/avatar.${ext}`;
+  const { error: upErr } = await sb.storage.from('avatares').upload(path, file, { upsert: true });
+  if(upErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir la foto: ${esc(upErr.message)}</div>`;
+    return;
+  }
+  const { data: pub } = sb.storage.from('avatares').getPublicUrl(path);
+  await sb.from('profiles').update({ foto_url: pub.publicUrl }).eq('id', u.id);
+  invalidarPerfil(u.id);
+  renderTrabajo();
+}
 async function solicitarVerificacion(){
   const u = currentUser();
-  u.verificacionPendiente = true;
-  await sb.from('profiles').update({ verificacion_pendiente: true }).eq('id', u.id);
+  const input = document.getElementById('wp-doc-input');
+  const msgEl = document.getElementById('wp-verif-msg');
+  const file = input && input.files[0];
+  if(!file){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">Adjunta un documento antes de enviar la solicitud.</div>`;
+    return;
+  }
+  const ext = file.name.split('.').pop();
+  const path = `${u.id}/${Date.now()}.${ext}`;
+  const { error: upErr } = await sb.storage.from('verificaciones').upload(path, file, { upsert: true });
+  if(upErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir el documento: ${esc(upErr.message)}</div>`;
+    return;
+  }
+  await sb.from('profiles').update({ verificacion_pendiente: true, verificacion_doc_path: path }).eq('id', u.id);
   invalidarPerfil(u.id);
   renderTrabajo();
 }
@@ -1061,8 +1152,10 @@ async function renderAdmin(){
     ${others.map(x=>{
       let verifCell = '—';
       if(x.tipo==='trabajador'){
+        const verDoc = x.verificacionPendiente && x.verificacion_doc_path
+          ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verDocumentoVerificacion('${esc(x.verificacion_doc_path)}')">Ver documento</button>` : '';
         verifCell = x.verificado ? `<span class="verif-badge">✓ Verificado</span>`
-          : x.verificacionPendiente ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="verificarTrabajador('${x.id}')">Verificar</button>`
+          : x.verificacionPendiente ? `${verDoc}<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="verificarTrabajador('${x.id}')">Verificar</button>`
           : `<span class="status-pill status-bloqueado">Sin solicitar</span>`;
       }
       return `<tr><td>${esc(x.nombre)}</td><td>${x.tipo}</td><td>${esc(x.correo)}</td>
@@ -1096,6 +1189,13 @@ async function toggleEstadoUsuario(id){
   await sb.from('profiles').update({ estado: nuevoEstado }).eq('id', id);
   invalidarPerfil(id);
   renderAdmin();
+}
+async function verDocumentoVerificacion(path){
+  // Abrir la ventana antes de esperar la URL firmada, para que el navegador no la bloquee.
+  const win = window.open('', '_blank');
+  const { data, error } = await sb.storage.from('verificaciones').createSignedUrl(path, 60);
+  if(error || !data){ win.close(); mostrarToast('No se pudo abrir el documento.', 'err'); return; }
+  win.location.href = data.signedUrl;
 }
 async function verificarTrabajador(id){
   const u = await obtenerPerfil(id);
@@ -1163,6 +1263,7 @@ async function renderEstadisticas(){
   if(session){
     sessionUserId = session.user.id;
     await cargarPerfilActual();
+    suscribirNotificaciones(sessionUserId);
   }
   if(location.hash){
     restoreFromHash();
