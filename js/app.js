@@ -58,6 +58,11 @@ function toggleTheme(){
 
 async function addNotificacion(userId, texto){
   await sb.from('notificaciones').insert({ user_id: userId, texto });
+  // Envía también un correo real. No bloquea ni rompe el flujo si falla
+  // (ej. todavía no configuraste RESEND_API_KEY): la notificación en la app
+  // ya quedó guardada de todos modos.
+  sb.functions.invoke('notificar-email', { body: { record: { user_id: userId, texto } } })
+    .catch(()=>{});
 }
 
 // Aviso flotante para confirmar acciones importantes (además del panel de campana).
