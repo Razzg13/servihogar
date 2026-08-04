@@ -2,8 +2,6 @@
 
 Plataforma web para conectar clientes con trabajadores independientes de servicios técnicos y domésticos (plomería, electricidad, limpieza, jardinería, pintura, cerrajería) en Ibagué.
 
-Proyecto académico — Metodología de Diseño de Software, Universidad del Tolima.
-
 ## Funcionalidades
 
 - Registro e inicio de sesión (cliente / trabajador)
