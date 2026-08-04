@@ -83,7 +83,7 @@ function mostrarToast(mensaje, tipo='info'){
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null };
+let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -217,6 +217,7 @@ function normalizarPerfil(p){
     verificacionPendiente: p.verificacion_pendiente,
     favoritos: p.favoritos || [],
     servicios: p.servicios || [],
+    galeria_fotos: p.galeria_fotos || [],
     disponibilidad: p.disponibilidad || (p.tipo==='trabajador' ? disponibilidadPorDefecto() : undefined)
   };
 }
@@ -706,8 +707,17 @@ async function verPerfil(workerId){
           </div>
           <h3 style="font-size:14px; margin-bottom:8px;">Servicios que ofrece</h3>
           <div class="chip-row">${w.servicios.length ? w.servicios.map(s=>`<span class="chip">${esc(s)}</span>`).join('') : '<span class="chip">Aún no ha agregado servicios</span>'}</div>
+          ${w.galeria_fotos && w.galeria_fotos.length ? `
+          <h3 style="font-size:14px; margin-bottom:8px;">Trabajos anteriores</h3>
+          <div class="galeria-grid">${w.galeria_fotos.map(url=>`<div class="galeria-item"><img src="${esc(url)}" alt="Trabajo de ${esc(w.nombre)}"></div>`).join('')}</div>` : ''}
           <h3 style="font-size:14px; margin-bottom:4px;">Comentarios</h3>
-          ${w.resenas.length ? w.resenas.map(r=>`<div class="review"><div class="stars">${'★'.repeat(r.estrellas)}${'☆'.repeat(5-r.estrellas)}</div><p>${esc(r.comentario)}</p><div class="who">— ${esc(r.cliente)}</div></div>`).join('') : '<p style="font-size:13px;color:var(--ink-soft);">Todavía no tiene comentarios.</p>'}
+          ${w.resenas.length ? w.resenas.map(r=>`<div class="review">
+            <div class="stars">${'★'.repeat(r.estrellas)}${'☆'.repeat(5-r.estrellas)}</div>
+            <p>${esc(r.comentario)}</p>
+            <div class="who">— ${esc(r.cliente)}</div>
+            ${r.respuesta_trabajador ? `<div class="resena-respuesta"><b>Respuesta de ${esc(w.nombre.split(' ')[0])}:</b> ${esc(r.respuesta_trabajador)}</div>` : ''}
+            ${u && u.tipo==='admin' ? `<button type="button" class="btn btn-outline" style="font-size:11px;padding:4px 8px;margin-top:8px;" onclick="eliminarResena(${r.id}, '${w.id}')">🗑 Eliminar reseña</button>` : ''}
+          </div>`).join('') : '<p style="font-size:13px;color:var(--ink-soft);">Todavía no tiene comentarios.</p>'}
         </div>
       </div>
       <div>
@@ -743,11 +753,28 @@ async function irAAgendar(workerId){
     document.getElementById('auth-msg').innerHTML = `<div class="msg err">Inicia sesión como cliente para agendar una cita.</div>`;
     return;
   }
-  state.workerActual = workerId; state.diaSel=null; state.horaSel=null; state.calMonthOffset=0;
+  state.workerActual = workerId; state.diaSel=null; state.horaSel=null; state.calMonthOffset=0; state.citaReagendar=null;
   nav('agendar');
   const w = await obtenerPerfil(workerId);
   if(!w){ document.getElementById('agendar-worker-summary').innerHTML = `<div class="empty-note">No encontramos ese trabajador.</div>`; return; }
   document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre, w.foto_url)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
+  document.getElementById('agendar-titulo').textContent = 'Agendar cita';
+  document.getElementById('btn-confirmar-cita').textContent = 'Confirmar cita';
+  renderCalendario();
+  renderSlots();
+}
+async function reagendarCita(citaId){
+  const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
+  const c = normalizarCita(citaRaw);
+  if(!c) return;
+  state.citaReagendar = citaId;
+  state.workerActual = c.trabajadorId; state.diaSel=null; state.horaSel=null; state.calMonthOffset=0;
+  nav('agendar');
+  const w = await obtenerPerfil(c.trabajadorId);
+  if(!w){ document.getElementById('agendar-worker-summary').innerHTML = `<div class="empty-note">No encontramos ese trabajador.</div>`; return; }
+  document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre, w.foto_url)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
+  document.getElementById('agendar-titulo').textContent = 'Reagendar cita';
+  document.getElementById('btn-confirmar-cita').textContent = 'Confirmar nuevo horario';
   renderCalendario();
   renderSlots();
 }
@@ -832,10 +859,28 @@ async function confirmarCita(){
     msg.innerHTML = `<div class="msg err">Ese horario ya no está disponible para este trabajador. Elige otro.</div>`;
     return;
   }
-  const { data: ocupadas } = await sb.from('citas').select('id')
+  let ocupadasQuery = sb.from('citas').select('id')
     .eq('trabajador_id', w.id).eq('fecha', fecha).eq('hora', state.horaSel).neq('estado','rechazada');
+  if(state.citaReagendar) ocupadasQuery = ocupadasQuery.neq('id', state.citaReagendar);
+  const { data: ocupadas } = await ocupadasQuery;
   if(ocupadas && ocupadas.length){
     msg.innerHTML = `<div class="msg err">Ese horario ya está reservado con este trabajador. Elige otro día u hora.</div>`;
+    return;
+  }
+  const cliente = currentUser();
+  if(state.citaReagendar){
+    const { data: cita, error } = await sb.from('citas').update({
+      fecha, hora: state.horaSel, estado: 'pendiente'
+    }).eq('id', state.citaReagendar).select().single();
+    if(error){
+      msg.innerHTML = `<div class="msg err">No se pudo reagendar: ${esc(error.message)}</div>`;
+      return;
+    }
+    addNotificacion(w.id, `${cliente.nombre} reagendó su cita para el ${cita.fecha} · ${cita.hora}. Debes confirmarla de nuevo.`);
+    msg.innerHTML = `<div class="msg ok">✓ Cita reagendada. Quedó pendiente de confirmación otra vez.</div>`;
+    mostrarToast('Cita reagendada.', 'ok');
+    state.citaReagendar = null;
+    setTimeout(()=>nav('miscitas'), 900);
     return;
   }
   const { data: cita, error } = await sb.from('citas').insert({
@@ -846,7 +891,6 @@ async function confirmarCita(){
     msg.innerHTML = `<div class="msg err">No se pudo agendar: ${esc(error.message)}</div>`;
     return;
   }
-  const cliente = currentUser();
   addNotificacion(w.id, `Nueva solicitud de ${cliente.nombre} para el ${cita.fecha} · ${cita.hora}`);
   msg.innerHTML = `<div class="msg ok">✓ Cita enviada. Quedó pendiente de confirmación por parte del trabajador.</div>`;
   mostrarToast('Cita enviada. Quedó pendiente de confirmación.', 'ok');
@@ -872,6 +916,7 @@ async function renderMisCitas(){
       if(c.estado==='aceptada') accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="marcarCompletada('${c.id}')">Marcar completado</button>`;
       if(c.estado==='completada' && !c.calificacion) accion = `<button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificar('${c.id}')">Calificar</button>`;
       if(c.calificacion) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion.estrellas)} calificado</span>`;
+      if(c.estado==='pendiente' || c.estado==='aceptada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="reagendarCita('${c.id}')">Reagendar</button>`;
       const pagoPill = c.pago==='pagado' ? `<span class="status-pill status-activo">pagado</span>` :
         (c.estado==='aceptada'||c.estado==='completada') ? `<button class="btn btn-outline" style="font-size:11px;padding:5px 9px;" onclick="simularPago('${c.id}')">Simular pago</button>` :
         `<span class="status-pill status-pendiente">pendiente</span>`;
@@ -922,16 +967,19 @@ function setStars(n){
   document.querySelectorAll('#stars-input span').forEach(s=>s.classList.toggle('on', Number(s.dataset.n)<=n));
 }
 async function enviarCalificacion(citaId){
-  const { data: citaRaw } = await sb.from('citas').select('trabajador_id').eq('id', citaId).single();
-  if(!citaRaw) return;
-  const cliente = currentUser();
   const comentario = document.getElementById('calif-comentario').value.trim() || 'Sin comentarios.';
-  await sb.from('resenas').insert({
-    worker_id: citaRaw.trabajador_id, cliente_nombre: cliente.nombre,
-    estrellas: state.estrellasSel, comentario
-  });
+  const panel = document.getElementById('calificar-panel');
+  // worker_id y cliente_nombre los completa un trigger en la base de datos a
+  // partir de la cita real (evita que se pueda calificar sin haber contratado).
+  const { data, error } = await sb.from('resenas').insert({
+    cita_id: citaId, estrellas: state.estrellasSel, comentario
+  }).select('worker_id').single();
+  if(error){
+    if(panel) panel.innerHTML = `<div class="msg err">No se pudo enviar la calificación: ${esc(error.message)}</div>`;
+    return;
+  }
   await sb.from('citas').update({ calificacion: { estrellas: state.estrellasSel, comentario } }).eq('id', citaId);
-  invalidarPerfil(citaRaw.trabajador_id);
+  invalidarPerfil(data.worker_id);
   renderMisCitas();
 }
 
@@ -1074,6 +1122,9 @@ async function renderTrabajo(){
     : `<button class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Solicitar verificación</button>`;
 
   state.wpDisponibilidad = JSON.parse(JSON.stringify(u.disponibilidad || disponibilidadPorDefecto()));
+  // currentUser() no trae las reseñas (cargarPerfilActual no las selecciona); se piden aparte para el panel.
+  const propioConResenas = await obtenerPerfil(u.id, true);
+  const misResenas = (propioConResenas && propioConResenas.resenas) || [];
 
   document.getElementById('work-perfil').innerHTML = `
     <div class="card" style="max-width:520px; margin-bottom:16px;">
@@ -1086,6 +1137,14 @@ async function renderTrabajo(){
           <div id="wp-foto-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
         </div>
       </div>
+    </div>
+    <div class="card" style="max-width:520px; margin-bottom:16px;">
+      <h3 style="font-size:15px; margin-bottom:6px;">Galería de trabajos</h3>
+      <p style="font-size:12px; color:var(--ink-soft); margin-bottom:12px;">Subí fotos de trabajos anteriores para que los clientes vean tu trabajo antes de contratarte.</p>
+      <div class="galeria-grid">${(u.galeria_fotos||[]).map((url,i)=>`<div class="galeria-item"><img src="${esc(url)}" alt=""><button type="button" class="galeria-del" onclick="eliminarFotoGaleria(${i})" aria-label="Eliminar foto">✕</button></div>`).join('')}</div>
+      <input type="file" id="wp-galeria-input" accept="image/*" class="hidden" onchange="subirFotoGaleria()">
+      <button type="button" class="btn btn-outline" style="margin-top:10px;" onclick="document.getElementById('wp-galeria-input').click()">+ Agregar foto</button>
+      <div id="wp-galeria-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
     </div>
     <div class="card" style="max-width:520px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
@@ -1117,6 +1176,22 @@ async function renderTrabajo(){
       </div>
       <button class="btn btn-primary" onclick="guardarPerfilTrabajador()">Guardar cambios</button>
       <div id="wp-msg" role="status" aria-live="polite"></div>
+    </div>
+    <div class="card" style="max-width:520px; margin-top:16px;">
+      <h3 style="font-size:15px; margin-bottom:14px;">Reseñas de clientes</h3>
+      ${misResenas.length ? misResenas.map(r=>`
+        <div class="review">
+          <div class="stars">${'★'.repeat(r.estrellas)}${'☆'.repeat(5-r.estrellas)}</div>
+          <p>${esc(r.comentario)}</p>
+          <div class="who">— ${esc(r.cliente)}</div>
+          ${r.respuesta_trabajador
+            ? `<div class="resena-respuesta"><b>Tu respuesta:</b> ${esc(r.respuesta_trabajador)}</div>`
+            : `<button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-top:8px;" onclick="mostrarFormularioRespuesta(${r.id})">Responder</button>
+               <div id="respuesta-form-${r.id}" class="hidden" style="margin-top:8px;">
+                 <textarea id="respuesta-texto-${r.id}" rows="2" placeholder="Escribe tu respuesta..." style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:12.5px;"></textarea>
+                 <button type="button" class="btn btn-primary" style="font-size:12px;padding:6px 10px;margin-top:6px;" onclick="enviarRespuestaResena(${r.id})">Enviar respuesta</button>
+               </div>`}
+        </div>`).join('') : `<p style="font-size:13px;color:var(--ink-soft);">Todavía no tienes reseñas.</p>`}
     </div>`;
 }
 function disponibilidadGridHTML(){
@@ -1179,6 +1254,63 @@ async function solicitarVerificacion(){
   await sb.from('profiles').update({ verificacion_pendiente: true, verificacion_doc_path: path }).eq('id', u.id);
   invalidarPerfil(u.id);
   renderTrabajo();
+}
+async function subirFotoGaleria(){
+  const u = currentUser();
+  const input = document.getElementById('wp-galeria-input');
+  const file = input && input.files[0];
+  const msgEl = document.getElementById('wp-galeria-msg');
+  if(!file) return;
+  if(!file.type.startsWith('image/')){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">Elegí un archivo de imagen.</div>`;
+    return;
+  }
+  const ext = file.name.split('.').pop();
+  const path = `${u.id}/${Date.now()}.${ext}`;
+  const { error: upErr } = await sb.storage.from('portafolio').upload(path, file);
+  if(upErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir la foto: ${esc(upErr.message)}</div>`;
+    return;
+  }
+  const { data: pub } = sb.storage.from('portafolio').getPublicUrl(path);
+  const nuevaGaleria = [...(u.galeria_fotos||[]), pub.publicUrl];
+  await sb.from('profiles').update({ galeria_fotos: nuevaGaleria }).eq('id', u.id);
+  u.galeria_fotos = nuevaGaleria;
+  invalidarPerfil(u.id);
+  input.value = '';
+  renderTrabajo();
+}
+async function eliminarFotoGaleria(index){
+  const u = currentUser();
+  const nuevaGaleria = (u.galeria_fotos||[]).slice();
+  nuevaGaleria.splice(index, 1);
+  await sb.from('profiles').update({ galeria_fotos: nuevaGaleria }).eq('id', u.id);
+  u.galeria_fotos = nuevaGaleria;
+  invalidarPerfil(u.id);
+  renderTrabajo();
+}
+function mostrarFormularioRespuesta(resenaId){
+  const el = document.getElementById(`respuesta-form-${resenaId}`);
+  if(el) el.classList.toggle('hidden');
+}
+async function enviarRespuestaResena(resenaId){
+  const texto = document.getElementById(`respuesta-texto-${resenaId}`).value.trim();
+  if(!texto) return;
+  const { error } = await sb.from('resenas').update({
+    respuesta_trabajador: texto, respuesta_fecha: new Date().toISOString()
+  }).eq('id', resenaId);
+  if(error){ mostrarToast('No se pudo enviar la respuesta.', 'err'); return; }
+  invalidarPerfil(currentUser().id);
+  mostrarToast('Respuesta enviada.', 'ok');
+  renderTrabajo();
+}
+async function eliminarResena(resenaId, workerId){
+  if(!confirm('¿Eliminar esta reseña? Esta acción no se puede deshacer.')) return;
+  const { error } = await sb.from('resenas').delete().eq('id', resenaId);
+  if(error){ mostrarToast('No se pudo eliminar la reseña.', 'err'); return; }
+  invalidarPerfil(workerId);
+  mostrarToast('Reseña eliminada.', 'ok');
+  verPerfil(workerId);
 }
 async function responderCita(id, estado){
   const { data: citaRaw } = await sb.from('citas').update({ estado }).eq('id', id).select().single();

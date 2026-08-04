@@ -213,7 +213,7 @@
 
   <!-- AGENDAR -->
   <section class="view" id="v-agendar">
-    <h2 style="margin-bottom:18px;">Agendar cita</h2>
+    <h2 id="agendar-titulo" style="margin-bottom:18px;">Agendar cita</h2>
     <div class="card" style="margin-bottom:20px; display:flex; gap:14px; align-items:center;" id="agendar-worker-summary"></div>
     <div class="cal">
       <div class="cal-head">
@@ -226,7 +226,7 @@
     <div class="section-title"><h2 style="font-size:15px;">Elige la hora</h2></div>
     <div class="slot-grid" id="slot-grid"></div>
     <div id="agendar-msg" role="status" aria-live="polite"></div>
-    <button class="btn btn-primary" onclick="confirmarCita()">Confirmar cita</button>
+    <button class="btn btn-primary" id="btn-confirmar-cita" onclick="confirmarCita()">Confirmar cita</button>
   </section>
 
   <!-- MIS CITAS (cliente) -->
