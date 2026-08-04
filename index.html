@@ -47,15 +47,11 @@
           <div><div class="n" id="stat-rating">—</div><div class="l">Calificación prom.</div></div>
         </div>
       </div>
-      <div class="hero-ticket">
-        <div class="tk-head"><b>Orden de servicio</b><span>N° 0231</span></div>
-        <div class="tk-body">
-          <div class="tk-row"><span class="k">Categoría</span><span class="v">Electricidad</span></div>
-          <div class="tk-row"><span class="k">Trabajador</span><span class="v">Jorge Ramírez</span></div>
-          <div class="tk-row"><span class="k">Fecha</span><span class="v">4 ago · 10:00 am</span></div>
-          <div class="tk-row"><span class="k">Zona</span><span class="v">Norte, Ibagué</span></div>
-        </div>
-        <div class="tk-stamp"><span class="badge">✓ Confirmado</span></div>
+      <div class="hero-feature">
+        <img src="img/icon.png" alt="">
+        <div class="hf-divider"></div>
+        <div class="hf-rating"><span class="hf-stars">★★★★★</span><span id="hf-rating-val">—</span></div>
+        <div class="hf-label">Calificación promedio real de nuestros trabajadores</div>
       </div>
     </div>
 
@@ -118,7 +114,15 @@
           <div class="password-field"><input type="password" id="login-pass" required><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('login-pass', this)">👁</button></div>
         </div>
         <button class="btn btn-primary" style="width:100%;" type="submit">Iniciar sesión</button>
-        <p style="font-size:11.5px; color:var(--ink-soft); margin-top:14px; text-align:center;">Prueba: camila@correo.com / 1234 (cliente) · admin@servihogar.com / admin</p>
+        <p style="text-align:center; margin-top:12px;"><button type="button" class="link-btn" onclick="mostrarRecuperar()">¿Olvidaste tu contraseña?</button></p>
+        <p style="font-size:11.5px; color:var(--ink-soft); margin-top:10px; text-align:center;">Prueba: camila@correo.com / 1234 (cliente) · admin@servihogar.com / admin</p>
+      </form>
+
+      <form id="form-forgot" class="hidden" onsubmit="return enviarRecuperacion(event)">
+        <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:14px;">Escribe tu correo y te enviamos un enlace para restablecer tu contraseña.</p>
+        <div class="field"><label for="forgot-email">Correo electrónico</label><input type="email" id="forgot-email" required></div>
+        <button class="btn btn-primary" style="width:100%;" type="submit">Enviar enlace de recuperación</button>
+        <p style="text-align:center; margin-top:14px;"><button type="button" class="link-btn" onclick="switchAuthTab('login')">← Volver a iniciar sesión</button></p>
       </form>
 
       <form id="form-register" class="hidden" onsubmit="return doRegister(event)">
@@ -150,6 +154,23 @@
     </div>
   </section>
 
+  <!-- RESTABLECER CONTRASEÑA -->
+  <section class="view" id="v-resetpass">
+    <div class="form-card">
+      <h2 style="font-size:18px; margin-bottom:14px;">Elige una nueva contraseña</h2>
+      <div id="resetpass-msg" role="status" aria-live="polite"></div>
+      <form id="form-resetpass" onsubmit="return guardarNuevaContrasena(event)">
+        <div class="field"><label for="resetpass-pass">Nueva contraseña</label>
+          <div class="password-field"><input type="password" id="resetpass-pass" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('resetpass-pass', this)">👁</button></div>
+        </div>
+        <div class="field"><label for="resetpass-pass2">Confirmar contraseña</label>
+          <div class="password-field"><input type="password" id="resetpass-pass2" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('resetpass-pass2', this)">👁</button></div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" type="submit">Guardar nueva contraseña</button>
+      </form>
+    </div>
+  </section>
+
   <!-- BUSCAR -->
   <section class="view" id="v-buscar">
     <div class="page-head">
@@ -167,6 +188,12 @@
         <option value="calificacion">Mejor calificados</option>
       </select>
       <button type="button" class="btn btn-outline" id="btn-cerca-de-mi" onclick="obtenerMiUbicacion()">📍 Cerca de mí</button>
+      <select id="buscar-radio" class="hidden" onchange="setRadioFiltro(this.value)">
+        <option value="">Cualquier distancia</option>
+        <option value="2">Hasta 2 km</option>
+        <option value="5">Hasta 5 km</option>
+        <option value="10">Hasta 10 km</option>
+      </select>
     </div>
     <div id="ubicacion-msg" role="status" aria-live="polite"></div>
     <div class="chipbar" id="buscar-chips"></div>

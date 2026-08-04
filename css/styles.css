@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
   :root{
-    --navy:#1C2B39; --navy-deep:#131E28; --paper:#F3F4F3; --card:#FFFFFF;
+    --navy:#1C2B39; --navy-deep:#131E28; --paper:#FAF3E9; --card:#FFFFFF;
     --orange:#E8752C; --orange-deep:#C75F1D; --green:#3F7D58; --red:#B4432F;
     --ink:#14201B; --ink-soft:#5B6A66; --line:#DCDFDE; --shadow:0 22px 45px -28px rgba(28,43,57,0.45);
   }
@@ -12,7 +12,7 @@
   [data-theme="dark"] body{background-image:linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);}
   [data-theme="dark"] .cat-card, [data-theme="dark"] .worker-card, [data-theme="dark"] .card, [data-theme="dark"] .step-card,
   [data-theme="dark"] table, [data-theme="dark"] .cal, [data-theme="dark"] .form-card,
-  [data-theme="dark"] .hero-ticket, [data-theme="dark"] .search-bar input, [data-theme="dark"] .field input,
+  [data-theme="dark"] .hero-feature, [data-theme="dark"] .search-bar input, [data-theme="dark"] .field input,
   [data-theme="dark"] .field select, [data-theme="dark"] .field textarea, [data-theme="dark"] .hero-search input,
   [data-theme="dark"] .slot, [data-theme="dark"] .chipbtn, [data-theme="dark"] .map-toggle button,
   [data-theme="dark"] .btn-outline, [data-theme="dark"] th{background:var(--card); color:var(--ink);}
@@ -78,15 +78,16 @@
   .btn-outline{background:#fff; color:var(--navy); border:1.5px solid var(--line);}
   .btn-outline:hover{border-color:var(--navy);}
   .btn-danger{background:#fff; color:var(--red); border:1.5px solid var(--red);}
+  .link-btn{background:none; border:none; padding:0; color:var(--orange-deep); font-size:12.5px; font-weight:600; text-decoration:underline; cursor:pointer;}
   .userchip{color:#fff; font-size:13px; font-weight:600;}
 
-  main{padding:36px 0 80px;}
+  main{padding:26px 0 80px;}
   .view{display:none;}
   .view.active{display:block;}
 
   /* HOME */
   .hero{background:radial-gradient(circle at 100% 0%, rgba(232,117,44,0.24) 0%, transparent 34%), radial-gradient(circle at 0% 100%, rgba(63,125,88,0.22) 0%, transparent 36%), var(--navy);
-        border-radius:22px; padding:56px 48px; color:#fff; margin-bottom:18px;
+        border-radius:22px; padding:56px 48px; color:#fff; margin-bottom:18px; box-shadow:0 30px 60px -30px rgba(19,30,40,0.55);
         display:flex; gap:44px; align-items:center; flex-wrap:wrap; overflow:hidden; position:relative;}
   .hero::after{content:""; position:absolute; inset:auto 0 0; height:1px; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);}
   .hero .txt{flex:1.2; min-width:260px;}
@@ -102,30 +103,17 @@
   .stats div .n{font-family:'IBM Plex Mono'; font-size:23px; font-weight:600; color:#fff;}
   .stats div .l{font-size:10.5px; color:#8FA3AE; text-transform:uppercase; letter-spacing:0.09em; margin-top:2px;}
 
-  /* hero signature: work-order ticket */
-  .hero-ticket{
-    flex:1; min-width:250px; max-width:290px; background:#fff; color:var(--ink);
-    border-radius:16px; padding:0 0 16px; box-shadow:0 30px 60px -18px rgba(0,0,0,0.5);
-    transform:rotate(2deg); position:relative;
+  /* hero signature: brand + real rating highlight */
+  .hero-feature{
+    flex:1; min-width:250px; max-width:280px; background:#fff; color:var(--ink);
+    border-radius:20px; padding:32px 24px; box-shadow:0 30px 60px -18px rgba(0,0,0,0.5);
+    display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px;
   }
-  .hero-ticket .tk-head{
-    display:flex; justify-content:space-between; align-items:center;
-    padding:14px 18px; border-bottom:1.5px dashed var(--line);
-  }
-  .hero-ticket .tk-head b{font-family:'Space Grotesk'; font-size:13px; color:var(--navy);}
-  .hero-ticket .tk-head span{font-family:'IBM Plex Mono'; font-size:10px; color:var(--ink-soft);}
-  .hero-ticket .tk-body{padding:16px 18px 4px; display:flex; flex-direction:column; gap:11px;}
-  .hero-ticket .tk-row{display:flex; justify-content:space-between; font-size:12.5px;}
-  .hero-ticket .tk-row .k{color:var(--ink-soft); font-family:'IBM Plex Mono'; font-size:10px; text-transform:uppercase; letter-spacing:0.04em;}
-  .hero-ticket .tk-row .v{font-weight:600; color:var(--navy); text-align:right;}
-  .hero-ticket .tk-stamp{
-    margin:14px 18px 0; border-top:1.5px dashed var(--line); padding-top:12px;
-    display:flex; align-items:center; gap:8px;
-  }
-  .hero-ticket .tk-stamp .badge{
-    font-family:'IBM Plex Mono'; font-size:10.5px; font-weight:600; color:var(--green);
-    background:#EAF3EC; padding:4px 9px; border-radius:20px;
-  }
+  .hero-feature img{width:72px; height:72px;}
+  .hero-feature .hf-divider{width:100%; border-top:1.5px dashed var(--line);}
+  .hero-feature .hf-rating{display:flex; align-items:center; gap:8px; font-family:'Space Grotesk'; font-size:24px; font-weight:700; color:var(--navy);}
+  .hero-feature .hf-stars{color:var(--orange); font-size:15px; letter-spacing:1px;}
+  .hero-feature .hf-label{font-size:12px; color:var(--ink-soft); line-height:1.4; max-width:190px;}
 
   .benefit-strip{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:0 0 38px;}
   .benefit-strip div{background:rgba(255,255,255,0.72); border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:var(--shadow); backdrop-filter:blur(10px);}
@@ -258,6 +246,7 @@
   .status-pendiente{background:#FCEFE3; color:var(--orange-deep);}
   .status-aceptada{background:#EAF3EC; color:var(--green);}
   .status-rechazada{background:#F3E3E0; color:var(--red);}
+  .status-cancelada{background:#F3E3E0; color:var(--red);}
   .status-completada{background:#E4E9F0; color:var(--navy);}
   .status-activo{background:#EAF3EC; color:var(--green);}
   .status-bloqueado{background:#F3E3E0; color:var(--red);}
@@ -338,7 +327,7 @@
     .hero-search .btn{width:100%;}
     .stats{gap:18px;}
     .stats > div{min-width:92px;}
-    .hero-ticket{max-width:none; width:100%; transform:none;}
+    .hero-feature{max-width:none; width:100%;}
     .cat-grid{grid-template-columns:repeat(2,1fr);}
     .worker-grid{grid-template-columns:1fr;}
     .search-bar input, .search-bar select, .search-bar button{width:100%; min-width:0;}
