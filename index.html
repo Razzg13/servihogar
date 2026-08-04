@@ -187,6 +187,7 @@
         <option value="precio-desc">Precio: mayor a menor</option>
         <option value="calificacion">Mejor calificados</option>
       </select>
+      <button type="button" class="btn btn-outline" id="btn-disponible-ahora" onclick="toggleFiltroDisponibleAhora()">🟢 Disponible ahora</button>
       <button type="button" class="btn btn-outline" id="btn-cerca-de-mi" onclick="obtenerMiUbicacion()">📍 Cerca de mí</button>
       <select id="buscar-radio" class="hidden" onchange="setRadioFiltro(this.value)">
         <option value="">Cualquier distancia</option>
@@ -245,9 +246,13 @@
   <section class="view" id="v-trabajo">
     <div class="tabbar">
       <button id="wtab-solicitudes" class="on" onclick="switchWorkTab('solicitudes')">Solicitudes</button>
+      <button id="wtab-mensajes" onclick="switchWorkTab('mensajes')">Mensajes</button>
+      <button id="wtab-ingresos" onclick="switchWorkTab('ingresos')">Ingresos</button>
       <button id="wtab-perfil" onclick="switchWorkTab('perfil')">Mi perfil profesional</button>
     </div>
     <div id="work-solicitudes"></div>
+    <div id="work-mensajes" class="hidden"></div>
+    <div id="work-ingresos" class="hidden"></div>
     <div id="work-perfil" class="hidden"></div>
   </section>
 
