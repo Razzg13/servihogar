@@ -100,7 +100,7 @@ function mostrarToast(mensaje, tipo='info'){
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null };
+let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[] };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -460,11 +460,13 @@ async function renderHome(){
   document.getElementById('home-workers').innerHTML = destacados.map(workerCardHTML).join('');
 }
 
-function workerCardHTML(w){
+function workerCardHTML(w, opts={}){
   const rating = avg(w.resenas);
   const u = currentUser();
   const esFav = u && u.tipo==='cliente' && (u.favoritos||[]).includes(w.id);
   const distancia = state.miUbicacion ? distanciaKm(state.miUbicacion, coordsForWorker(w)) : null;
+  const compararCheckbox = opts.comparador ? `<label class="compare-check" onclick="event.stopPropagation();">
+    <input type="checkbox" ${state.compararIds.includes(w.id)?'checked':''} onchange="toggleComparar('${w.id}', this.checked)"> Comparar</label>` : '';
   return `<div class="worker-card ticket" onclick="verPerfil('${w.id}')">
     <div class="worker-top">
       ${avatarHTML(w.nombre, w.foto_url)}
@@ -480,6 +482,7 @@ function workerCardHTML(w){
       </div>
       <div class="tarifa">Desde ${fmtCOP(w.tarifa)}</div>
     </div>
+    ${compararCheckbox}
   </div>`;
 }
 async function toggleFavorito(workerId){
@@ -667,6 +670,11 @@ async function renderBuscar(){
   if(state.miUbicacion && state.radioFiltro){
     results = results.filter(w=>distanciaKm(state.miUbicacion, coordsForWorker(w)) <= state.radioFiltro);
   }
+  if(state.miUbicacion){
+    // Si el trabajador definió un radio máximo de desplazamiento, no lo mostramos
+    // a clientes fuera de ese radio (independiente de lo que el cliente haya elegido).
+    results = results.filter(w=>!(w.radio_cobertura_km && distanciaKm(state.miUbicacion, coordsForWorker(w)) > w.radio_cobertura_km));
+  }
   if(state.filtroDisponibleAhora) results = results.filter(w=>w.disponible_ahora);
 
   const orden = document.getElementById('buscar-orden') ? document.getElementById('buscar-orden').value : 'relevancia';
@@ -680,7 +688,8 @@ async function renderBuscar(){
   }
 
   const box = document.getElementById('buscar-results');
-  box.innerHTML = results.length ? results.map(workerCardHTML).join('') : `<div class="empty-note">No encontramos trabajadores con ese criterio. Prueba con otra categoría o término.</div>`;
+  box.innerHTML = results.length ? results.map(w=>workerCardHTML(w,{comparador:true})).join('') : `<div class="empty-note">No encontramos trabajadores con ese criterio. Prueba con otra categoría o término.</div>`;
+  renderComparadorBar();
   const summary = document.getElementById('buscar-summary');
   if(summary){
     const tarifas = results.map(w=>Number(w.tarifa)||0).filter(Boolean);
@@ -695,6 +704,50 @@ async function renderBuscar(){
 }
 function setCatFiltro(cat){ state.catFiltro = cat || null; renderBuscar(); }
 function setRadioFiltro(v){ state.radioFiltro = v ? Number(v) : null; renderBuscar(); }
+function toggleComparar(workerId, marcado){
+  if(marcado){
+    if(state.compararIds.length>=3){ mostrarToast('Podés comparar hasta 3 trabajadores a la vez.', 'err'); renderBuscar(); return; }
+    state.compararIds.push(workerId);
+  } else {
+    state.compararIds = state.compararIds.filter(id=>id!==workerId);
+  }
+  renderComparadorBar();
+}
+function renderComparadorBar(){
+  const bar = document.getElementById('comparador-bar');
+  if(!bar) return;
+  bar.classList.toggle('hidden', state.compararIds.length===0);
+  const count = document.getElementById('comparador-count');
+  if(count) count.textContent = state.compararIds.length;
+}
+function limpiarComparador(){
+  state.compararIds = [];
+  document.getElementById('comparador-panel').classList.add('hidden');
+  renderComparadorBar();
+  renderBuscar();
+}
+async function verComparador(){
+  const trabajadores = await obtenerPerfiles(state.compararIds);
+  const panel = document.getElementById('comparador-panel');
+  if(!panel || !trabajadores.length) return;
+  panel.classList.remove('hidden');
+  panel.innerHTML = `<div class="card" style="overflow-x:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <h3 style="font-size:15px;">Comparar trabajadores</h3>
+      <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="limpiarComparador()">Cerrar</button>
+    </div>
+    <table><thead><tr><th></th>${trabajadores.map(w=>`<th>${esc(w.nombre)}</th>`).join('')}</tr></thead><tbody>
+      <tr><td>Categoría</td>${trabajadores.map(w=>`<td>${esc(w.categoria)}</td>`).join('')}</tr>
+      <tr><td>Zona</td>${trabajadores.map(w=>`<td>${esc(w.zona)}</td>`).join('')}</tr>
+      <tr><td>Calificación</td>${trabajadores.map(w=>`<td>${avg(w.resenas)||'Sin calificar'}</td>`).join('')}</tr>
+      <tr><td>Tarifa desde</td>${trabajadores.map(w=>`<td>${fmtCOP(w.tarifa)}</td>`).join('')}</tr>
+      <tr><td>Experiencia</td>${trabajadores.map(w=>`<td>${w.experiencia} años</td>`).join('')}</tr>
+      <tr><td>Verificado</td>${trabajadores.map(w=>`<td>${w.verificado?'✓ Sí':'No'}</td>`).join('')}</tr>
+      <tr><td>Servicios</td>${trabajadores.map(w=>`<td>${(w.servicios||[]).map(s=>esc(s)).join(', ')||'—'}</td>`).join('')}</tr>
+      <tr><td></td>${trabajadores.map(w=>`<td><button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="verPerfil('${w.id}')">Ver perfil</button></td>`).join('')}</tr>
+    </tbody></table>
+  </div>`;
+}
 function setVistaBuscar(vista){
   state.vistaBuscar = vista;
   document.getElementById('btn-vista-lista').classList.toggle('on', vista==='lista');
@@ -727,6 +780,9 @@ async function verPerfil(workerId){
   const rating = avg(w.resenas);
   const u = currentUser();
   const esFav = u && u.tipo==='cliente' && (u.favoritos||[]).includes(w.id);
+  const trabajadores = await cargarTrabajadores();
+  const similares = trabajadores.filter(x=>x.id!==w.id && x.categoria===w.categoria && x.estado==='activo')
+    .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,3);
   document.getElementById('perfil-content').innerHTML = `
     <div class="profile-grid">
       <div>
@@ -735,6 +791,7 @@ async function verPerfil(workerId){
             ${avatarHTML(w.nombre, w.foto_url)}
             <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''} ${w.disponible_ahora?'<span class="rating-pill disp-ahora" style="vertical-align:middle;">🟢 Disponible ahora</span>':''}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
             ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
+            <button class="icon-btn" style="color:var(--navy); border-color:var(--line);" aria-label="Compartir perfil" onclick="compartirPerfil('${w.id}')">🔗</button>
           </div>
           <div class="spec-sheet">
             <div class="spec-item"><div class="k">Calificación</div><div class="v">${rating || '—'}</div></div>
@@ -751,6 +808,7 @@ async function verPerfil(workerId){
           ${w.resenas.length ? w.resenas.map(r=>`<div class="review">
             <div class="stars">${'★'.repeat(r.estrellas)}${'☆'.repeat(5-r.estrellas)}</div>
             <p>${esc(r.comentario)}</p>
+            ${r.fotos && r.fotos.length ? `<div class="galeria-grid" style="max-width:280px;">${r.fotos.map(url=>`<div class="galeria-item"><img src="${esc(url)}" alt=""></div>`).join('')}</div>` : ''}
             <div class="who">— ${esc(r.cliente)}</div>
             ${r.respuesta_trabajador ? `<div class="resena-respuesta"><b>Respuesta de ${esc(w.nombre.split(' ')[0])}:</b> ${esc(r.respuesta_trabajador)}</div>` : ''}
             ${u && u.tipo==='admin' ? `<button type="button" class="btn btn-outline" style="font-size:11px;padding:4px 8px;margin-top:8px;" onclick="eliminarResena(${r.id}, '${w.id}')">🗑 Eliminar reseña</button>` : ''}
@@ -771,8 +829,23 @@ async function verPerfil(workerId){
           <div class="map-caption"><span>${esc(w.zona)}, Ibagué</span><span>Ubicación aproximada</span></div>
         </div>
       </div>
-    </div>`;
+    </div>
+    ${similares.length ? `<div class="section-title"><h2>Trabajadores similares</h2></div><div class="worker-grid">${similares.map(x=>workerCardHTML(x)).join('')}</div>` : ''}`;
   initMapaPerfil(w);
+}
+async function compartirPerfil(workerId){
+  const w = await obtenerPerfil(workerId);
+  const url = `${window.location.origin}${window.location.pathname}#/perfil/${workerId}`;
+  if(navigator.share){
+    navigator.share({ title: `Hogandia${w ? ' — '+w.nombre : ''}`, url }).catch(()=>{});
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(url);
+    mostrarToast('Link del perfil copiado al portapapeles.', 'ok');
+  }catch{
+    mostrarToast('No se pudo copiar el link.', 'err');
+  }
 }
 
 function initMapaPerfil(w){
@@ -866,6 +939,14 @@ async function renderSlots(){
   const dia = diaSemanaDeFecha(new Date(target.getFullYear(), target.getMonth(), state.diaSel));
   const w = await obtenerPerfil(state.workerActual);
   if(!w){ grid.innerHTML = `<div class="empty-note" style="padding:16px 0;">No encontramos ese trabajador.</div>`; return; }
+  const hoy = new Date();
+  const esHoy = state.calMonthOffset===0 && state.diaSel===hoy.getDate();
+  const urgenciaMsg = document.getElementById('agendar-urgencia-msg');
+  if(urgenciaMsg){
+    urgenciaMsg.innerHTML = (esHoy && w.tarifa_urgente)
+      ? `<div class="msg" style="background:#FCEFE3;color:var(--orange-deep);margin-bottom:12px;">⚡ Estás agendando para hoy — se aplica un recargo por urgencia de ${fmtCOP(w.tarifa_urgente)}.</div>`
+      : '';
+  }
   const disponibles = (w.disponibilidad && w.disponibilidad[dia]) || [];
   if(!disponibles.length){
     grid.innerHTML = `<div class="empty-note" style="padding:16px 0;">${esc(w.nombre.split(' ')[0])} no atiende ese día. Elige otro día en el calendario.</div>`;
@@ -903,14 +984,21 @@ async function confirmarCita(){
   if(state.citaReagendar) ocupadasQuery = ocupadasQuery.neq('id', state.citaReagendar);
   const { data: ocupadas } = await ocupadasQuery;
   if(ocupadas && ocupadas.length){
-    msg.innerHTML = `<div class="msg err">Ese horario ya está reservado con este trabajador. Elige otro día u hora.</div>`;
+    msg.innerHTML = `<div class="msg err">Ese horario ya está reservado con este trabajador. Elige otro día u hora, o
+      <button type="button" class="link-btn" onclick="anotarseListaEspera('${w.id}','${fecha}','${state.horaSel}')">anotate en la lista de espera</button>.</div>`;
     return;
   }
   const cliente = currentUser();
   const inicio = parseFechaHoraCita(fecha, state.horaSel);
+  const notasCliente = document.getElementById('agendar-notas').value.trim();
+  const direccionReferencia = document.getElementById('agendar-direccion').value.trim();
+  const recurrente = document.getElementById('chk-recurrente').checked;
+  const esUrgente = state.calMonthOffset===0 && state.diaSel===new Date().getDate();
   if(state.citaReagendar){
     const { data: cita, error } = await sb.from('citas').update({
-      fecha, hora: state.horaSel, estado: 'pendiente', inicio: inicio ? inicio.toISOString() : null
+      fecha, hora: state.horaSel, estado: 'pendiente', inicio: inicio ? inicio.toISOString() : null,
+      notas_cliente: notasCliente || null, direccion_referencia: direccionReferencia || null,
+      recurrente, es_urgente: esUrgente
     }).eq('id', state.citaReagendar).select().single();
     if(error){
       msg.innerHTML = `<div class="msg err">No se pudo reagendar: ${esc(error.message)}</div>`;
@@ -926,7 +1014,9 @@ async function confirmarCita(){
   const { data: cita, error } = await sb.from('citas').insert({
     cliente_id: sessionUserId, trabajador_id: w.id,
     fecha, hora: state.horaSel, estado: 'pendiente', pago: 'pendiente',
-    inicio: inicio ? inicio.toISOString() : null
+    inicio: inicio ? inicio.toISOString() : null,
+    notas_cliente: notasCliente || null, direccion_referencia: direccionReferencia || null,
+    recurrente, es_urgente: esUrgente
   }).select().single();
   if(error){
     msg.innerHTML = `<div class="msg err">No se pudo agendar: ${esc(error.message)}</div>`;
@@ -937,6 +1027,15 @@ async function confirmarCita(){
   mostrarToast('Cita enviada. Quedó pendiente de confirmación.', 'ok');
   setTimeout(()=>nav('miscitas'), 900);
 }
+async function anotarseListaEspera(trabajadorId, fecha, hora){
+  const u = currentUser();
+  const { error } = await sb.from('listas_espera').insert({ trabajador_id: trabajadorId, cliente_id: u.id, fecha, hora });
+  if(error){
+    mostrarToast(error.message.includes('duplicate') ? 'Ya estás anotado para ese horario.' : 'No se pudo anotar en la lista de espera.', 'err');
+    return;
+  }
+  mostrarToast('Anotado en la lista de espera. Te avisamos si se libera ese horario.', 'ok');
+}
 
 /* ---------------- MIS CITAS (cliente) ---------------- */
 async function renderMisCitas(){
@@ -945,11 +1044,13 @@ async function renderMisCitas(){
   if(!u || u.tipo!=='cliente'){ box.innerHTML = `<div class="empty-note">Inicia sesión como cliente para ver tus citas.</div>`; return; }
   const { data } = await sb.from('citas').select('*').eq('cliente_id', u.id).order('created_at', {ascending:false});
   const propias = (data||[]).map(normalizarCita);
+  state.citasCacheCliente = propias;
   if(!propias.length){ box.innerHTML = `<div class="empty-note">Todavía no has agendado ninguna cita. <br><button class="btn btn-primary" style="margin-top:12px;" onclick="nav('buscar')">Buscar trabajadores</button></div>`; return; }
 
   const trabajadores = await obtenerPerfiles(propias.map(c=>c.trabajadorId));
   const porId = new Map(trabajadores.map(w=>[w && w.id, w]));
-  box.innerHTML = `<table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Pago</th><th>Acciones</th></tr></thead><tbody>
+  box.innerHTML = `<button type="button" class="btn btn-outline" style="margin-bottom:14px;" onclick="exportarCitasCSV('cliente')">⬇ Exportar historial (CSV)</button>
+  <table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Pago</th><th>Acciones</th></tr></thead><tbody>
     ${propias.map(c=>{
       const w = porId.get(c.trabajadorId);
       let accion = '';
@@ -964,8 +1065,8 @@ async function renderMisCitas(){
         (c.estado==='aceptada'||c.estado==='completada') ? `<button class="btn btn-outline" style="font-size:11px;padding:5px 9px;" onclick="simularPago('${c.id}')">Simular pago</button>` :
         `<span class="status-pill status-pendiente">pendiente</span>`;
       return `<tr>
-        <td>${w?esc(w.nombre):'—'}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
-        <td><span class="status-pill status-${c.estado}">${c.estado}</span></td>
+        <td>${w?esc(w.nombre):'—'}${c.recurrente?' <span title="Servicio recurrente">🔁</span>':''}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
+        <td><span class="status-pill status-${c.estado}">${c.estado}</span>${c.estado==='aceptada' && c.en_camino ? `<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span> <button type="button" class="btn btn-outline" style="font-size:10.5px;padding:3px 7px;margin-top:4px;" onclick="verUbicacionEnCamino('${c.id}')">Ver en mapa</button>` : ''}</td>
         <td>${pagoPill}</td>
         <td><div class="row-actions">${accion}
           <button onclick="abrirChat('${c.id}')">Chat</button>
@@ -975,9 +1076,41 @@ async function renderMisCitas(){
       </tr>`;
     }).join('')}
   </tbody></table>
+  <div id="encamino-mapa-panel" class="hidden" style="margin-top:20px;"></div>
   <div id="calificar-panel" style="margin-top:20px;"></div>
   <div id="chat-panel" style="margin-top:20px;"></div>
   <div id="reportar-panel" style="margin-top:20px;" role="status" aria-live="polite"></div>`;
+}
+let mapEnCamino = null;
+async function verUbicacionEnCamino(citaId){
+  const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
+  const c = normalizarCita(citaRaw);
+  if(!c || c.en_camino_lat==null) return;
+  const panel = document.getElementById('encamino-mapa-panel');
+  if(!panel) return;
+  panel.classList.remove('hidden');
+  panel.innerHTML = `<div class="card"><h3 style="font-size:14px;margin-bottom:10px;">Ubicación de tu trabajador</h3><div class="map-box" id="encamino-mapa" style="height:220px;"></div></div>`;
+  if(mapEnCamino){ mapEnCamino.remove(); mapEnCamino = null; }
+  mapEnCamino = L.map('encamino-mapa', {zoomControl:false, attributionControl:false}).setView([c.en_camino_lat, c.en_camino_lng], 14);
+  tileLayer(mapEnCamino);
+  L.marker([c.en_camino_lat, c.en_camino_lng], {icon:pinIcon('#3F7D58')}).addTo(mapEnCamino);
+  setTimeout(()=>mapEnCamino && mapEnCamino.invalidateSize(), 80);
+}
+function exportarCitasCSV(vista){
+  const filas = vista==='cliente' ? state.citasCacheCliente : state.citasCacheTrabajador;
+  if(!filas || !filas.length){ mostrarToast('No hay citas para exportar.', 'err'); return; }
+  const encabezado = ['Fecha','Hora','Estado','Pago','Monto','Notas'];
+  const lineas = [encabezado.join(',')];
+  filas.forEach(c=>{
+    const campos = [c.fecha, c.hora, c.estado, c.pago||'', c.monto||'', (c.notas_cliente||'').replace(/[\r\n,]+/g,' ')];
+    lineas.push(campos.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
+  });
+  const blob = new Blob(['﻿' + lineas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `historial-hogandia-${vista}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 async function cancelarCita(id){
   if(!confirm('¿Seguro que quieres cancelar esta cita? Esta acción no se puede deshacer.')) return;
@@ -989,11 +1122,13 @@ async function marcarCompletada(id){
   renderMisCitas();
 }
 async function simularPago(id){
-  const { data: citaPrevia } = await sb.from('citas').select('trabajador_id').eq('id', id).single();
+  const { data: citaPrevia } = await sb.from('citas').select('trabajador_id, es_urgente').eq('id', id).single();
   const w = citaPrevia ? await obtenerPerfil(citaPrevia.trabajador_id) : null;
   // No hay un monto por servicio guardado en ningún lado; se usa la tarifa
-  // actual del trabajador como aproximación para el panel de ingresos.
-  const { data: c } = await sb.from('citas').update({ pago: 'pagado', monto: w ? w.tarifa : null }).eq('id', id).select().single();
+  // actual del trabajador (+ recargo si fue urgente) como aproximación para
+  // el panel de ingresos.
+  const monto = w ? w.tarifa + (citaPrevia.es_urgente ? (w.tarifa_urgente||0) : 0) : null;
+  const { data: c } = await sb.from('citas').update({ pago: 'pagado', monto }).eq('id', id).select().single();
   if(w) addNotificacion(w.id, `Pago simulado recibido por el servicio del ${c.fecha}.`);
   mostrarToast('Pago simulado registrado.', 'ok');
   (document.getElementById('v-miscitas').classList.contains('active') ? renderMisCitas : renderTrabajo)();
@@ -1027,6 +1162,8 @@ function abrirCalificar(id){
     <h3 style="font-size:14px;margin-bottom:10px;">Califica el servicio</h3>
     <div class="stars-input" id="stars-input">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="setStars(${n})">★</span>`).join('')}</div>
     <textarea id="calif-comentario" placeholder="Cuéntanos cómo te fue..." rows="3" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;margin-bottom:12px;"></textarea>
+    <label style="font-size:12px;color:var(--ink-soft);display:block;margin-bottom:8px;">Agregar fotos del trabajo (opcional, hasta 4)</label>
+    <input type="file" id="calif-fotos" accept="image/*" multiple style="margin-bottom:12px;">
     <button class="btn btn-primary" onclick="enviarCalificacion('${id}')">Enviar calificación</button>
   </div>`;
   state.estrellasSel = 5; setStars(5);
@@ -1036,12 +1173,25 @@ function setStars(n){
   document.querySelectorAll('#stars-input span').forEach(s=>s.classList.toggle('on', Number(s.dataset.n)<=n));
 }
 async function enviarCalificacion(citaId){
+  const u = currentUser();
   const comentario = document.getElementById('calif-comentario').value.trim() || 'Sin comentarios.';
   const panel = document.getElementById('calificar-panel');
+  const fotosInput = document.getElementById('calif-fotos');
+  const archivos = fotosInput ? Array.from(fotosInput.files).slice(0, 4) : [];
+  const fotos = [];
+  for(let i=0; i<archivos.length; i++){
+    const ext = archivos[i].name.split('.').pop();
+    const path = `${u.id}/${citaId}-${Date.now()}-${i}.${ext}`;
+    const { error: upErr } = await sb.storage.from('resenas-fotos').upload(path, archivos[i]);
+    if(!upErr){
+      const { data: pub } = sb.storage.from('resenas-fotos').getPublicUrl(path);
+      fotos.push(pub.publicUrl);
+    }
+  }
   // worker_id y cliente_nombre los completa un trigger en la base de datos a
   // partir de la cita real (evita que se pueda calificar sin haber contratado).
   const { data, error } = await sb.from('resenas').insert({
-    cita_id: citaId, estrellas: state.estrellasSel, comentario
+    cita_id: citaId, estrellas: state.estrellasSel, comentario, fotos
   }).select('worker_id').single();
   if(error){
     if(panel) panel.innerHTML = `<div class="msg err">No se pudo enviar la calificación: ${esc(error.message)}</div>`;
@@ -1329,6 +1479,7 @@ async function renderTrabajo(){
 
   const { data } = await sb.from('citas').select('*').eq('trabajador_id', u.id).order('created_at', {ascending:false});
   const propias = (data||[]).map(normalizarCita);
+  state.citasCacheTrabajador = propias;
   const clientes = await obtenerPerfiles(propias.map(c=>c.clienteId));
   const clientePorId = new Map(clientes.map(c=>[c && c.id, c]));
   // Reputación del cliente vista desde este trabajador: promedio de las
@@ -1343,18 +1494,21 @@ async function renderTrabajo(){
     }
   });
   document.getElementById('work-solicitudes').innerHTML = propias.length ? `
+    <button type="button" class="btn btn-outline" style="margin-bottom:14px;" onclick="exportarCitasCSV('trabajador')">⬇ Exportar historial (CSV)</button>
     <table><thead><tr><th>Cliente</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Pago</th><th>Acciones</th></tr></thead><tbody>
     ${propias.map(c=>{
       const cli = clientePorId.get(c.clienteId);
       const califCli = misCalifClientes.get(c.clienteId);
       const nombreCliente = `${cli?esc(cli.nombre):'—'}${califCli ? ` <span class="mono" style="font-size:10.5px;color:var(--ink-soft);" title="Tu calificación a este cliente">★${(califCli.suma/califCli.n).toFixed(1)}</span>` : ''}`;
+      const notasIcono = (c.notas_cliente || c.direccion_referencia)
+        ? ` <span title="${esc([c.direccion_referencia?'Dirección: '+c.direccion_referencia:'', c.notas_cliente?'Notas: '+c.notas_cliente:''].filter(Boolean).join(' · '))}">📝</span>` : '';
       let accion = '';
       if(c.estado==='pendiente') accion = `<div class="row-actions"><button class="acc" onclick="responderCita('${c.id}','aceptada')">Aceptar</button><button class="rej" onclick="responderCita('${c.id}','rechazada')">Rechazar</button></div>`;
-      if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}')">Cancelar</button> <button onclick="descargarIcs('${c.id}')">📅 Calendario</button>`;
+      if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}')">Cancelar</button> <button onclick="descargarIcs('${c.id}')">📅 Calendario</button>${!c.en_camino ? ` <button onclick="avisarEnCamino('${c.id}')">🚗 Voy en camino</button>` : ''}`;
       if(c.estado==='completada' && !c.calificacion_trabajador) accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificarCliente('${c.id}')">Calificar cliente</button>`;
       if(c.calificacion_trabajador) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion_trabajador.estrellas)} calificado</span>`;
-      return `<tr><td>${nombreCliente}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
-        <td><span class="status-pill status-${c.estado}">${c.estado}</span></td>
+      return `<tr><td>${nombreCliente}</td><td>${esc(c.fecha)}${notasIcono}</td><td>${esc(c.hora)}</td>
+        <td><span class="status-pill status-${c.estado}">${c.estado}</span>${c.en_camino?'<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span>':''}</td>
         <td><span class="status-pill status-${c.pago==='pagado'?'activo':'pendiente'}">${c.pago||'pendiente'}</span></td>
         <td><div class="row-actions">${accion}<button onclick="abrirChat('${c.id}')">Chat</button></div></td></tr>`;
     }).join('')}
@@ -1419,6 +1573,8 @@ async function renderTrabajo(){
       </div>
       <div class="field"><label for="wp-exp">Años de experiencia</label><input type="number" id="wp-exp" min="0" value="${u.experiencia}"></div>
       <div class="field"><label for="wp-tarifa">Tarifa desde (COP)</label><input type="number" id="wp-tarifa" min="0" value="${u.tarifa}"></div>
+      <div class="field"><label for="wp-tarifa-urgente">Recargo por urgencia (COP, opcional)</label><input type="number" id="wp-tarifa-urgente" min="0" value="${u.tarifa_urgente||''}" placeholder="Ej. 15000"></div>
+      <div class="field"><label for="wp-radio-cobertura">Radio máximo de desplazamiento (km, opcional)</label><input type="number" id="wp-radio-cobertura" min="0" value="${u.radio_cobertura_km||''}" placeholder="Ej. 10"></div>
       <div class="field"><label for="wp-servicios">Servicios (separados por coma)</label><input id="wp-servicios" value="${esc(u.servicios.join(', '))}"></div>
       <div class="field"><label>Disponibilidad semanal</label>
         <div id="wp-disponibilidad" class="disp-grid">${disponibilidadGridHTML()}</div>
@@ -1432,6 +1588,7 @@ async function renderTrabajo(){
         <div class="review">
           <div class="stars">${'★'.repeat(r.estrellas)}${'☆'.repeat(5-r.estrellas)}</div>
           <p>${esc(r.comentario)}</p>
+          ${r.fotos && r.fotos.length ? `<div class="galeria-grid" style="max-width:280px;">${r.fotos.map(url=>`<div class="galeria-item"><img src="${esc(url)}" alt=""></div>`).join('')}</div>` : ''}
           <div class="who">— ${esc(r.cliente)}</div>
           ${r.respuesta_trabajador
             ? `<div class="resena-respuesta"><b>Tu respuesta:</b> ${esc(r.respuesta_trabajador)}</div>`
@@ -1582,6 +1739,22 @@ async function cancelarCitaTrabajador(id){
   mostrarToast('Cita cancelada.', 'ok');
   renderTrabajo();
 }
+function avisarEnCamino(citaId){
+  if(!navigator.geolocation){ mostrarToast('Tu navegador no soporta ubicación.', 'err'); return; }
+  navigator.geolocation.getCurrentPosition(
+    async pos=>{
+      const { data: citaRaw, error } = await sb.from('citas').update({
+        en_camino: true, en_camino_lat: pos.coords.latitude, en_camino_lng: pos.coords.longitude
+      }).eq('id', citaId).select().single();
+      if(error){ mostrarToast('No se pudo avisar. Intenta de nuevo.', 'err'); return; }
+      const c = normalizarCita(citaRaw);
+      addNotificacion(c.clienteId, `Tu trabajador va en camino para la cita del ${c.fecha} a las ${c.hora}.`);
+      mostrarToast('Avisamos al cliente que vas en camino.', 'ok');
+      renderTrabajo();
+    },
+    ()=>mostrarToast('No pudimos acceder a tu ubicación. Revisa los permisos del navegador.', 'err')
+  );
+}
 async function guardarPerfilTrabajador(){
   const u = currentUser();
   const zona = document.getElementById('wp-zona').value.trim();
@@ -1593,11 +1766,14 @@ async function guardarPerfilTrabajador(){
   u.zona = zona;
   u.experiencia = Math.max(0, Number(document.getElementById('wp-exp').value)||0);
   u.tarifa = Math.max(0, Number(document.getElementById('wp-tarifa').value)||0);
+  u.tarifa_urgente = document.getElementById('wp-tarifa-urgente').value ? Math.max(0, Number(document.getElementById('wp-tarifa-urgente').value)) : null;
+  u.radio_cobertura_km = document.getElementById('wp-radio-cobertura').value ? Math.max(0, Number(document.getElementById('wp-radio-cobertura').value)) : null;
   u.servicios = document.getElementById('wp-servicios').value.split(',').map(s=>s.trim()).filter(Boolean);
   u.disponibilidad = state.wpDisponibilidad;
   const { error } = await sb.from('profiles').update({
     categoria: u.categoria, zona: u.zona, experiencia: u.experiencia,
-    tarifa: u.tarifa, servicios: u.servicios, disponibilidad: u.disponibilidad
+    tarifa: u.tarifa, tarifa_urgente: u.tarifa_urgente, radio_cobertura_km: u.radio_cobertura_km,
+    servicios: u.servicios, disponibilidad: u.disponibilidad
   }).eq('id', u.id);
   if(error){
     document.getElementById('wp-msg').innerHTML = `<div class="msg err" style="margin-top:12px;">No se pudo guardar: ${esc(error.message)}</div>`;

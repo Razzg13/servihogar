@@ -205,6 +205,12 @@
     </div>
     <div class="worker-grid" id="buscar-results"></div>
     <div class="map-box hidden" id="buscar-mapa-box" style="height:380px;"></div>
+    <div id="comparador-panel" class="hidden" style="margin-top:20px;"></div>
+    <div id="comparador-bar" class="hidden">
+      <span><span id="comparador-count">0</span> seleccionados para comparar</span>
+      <button type="button" class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="verComparador()">Comparar</button>
+      <button type="button" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;" onclick="limpiarComparador()">Limpiar</button>
+    </div>
   </section>
 
   <!-- PERFIL -->
@@ -226,6 +232,10 @@
     </div>
     <div class="section-title"><h2 style="font-size:15px;">Elige la hora</h2></div>
     <div class="slot-grid" id="slot-grid"></div>
+    <div id="agendar-urgencia-msg"></div>
+    <div class="field"><label for="agendar-direccion">Dirección de referencia (opcional)</label><input id="agendar-direccion" placeholder="Ej. Carrera 5 #12-34, portón azul"></div>
+    <div class="field"><label for="agendar-notas">Notas para el trabajador (opcional)</label><textarea id="agendar-notas" rows="2" placeholder="Ej. entrar por atrás, el timbre no funciona..." style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;"></textarea></div>
+    <div class="field"><label style="display:flex;align-items:center;gap:8px;font-weight:400;"><input type="checkbox" id="chk-recurrente" style="width:auto;">🔁 Repetir este servicio cada mes</label></div>
     <div id="agendar-msg" role="status" aria-live="polite"></div>
     <button class="btn btn-primary" id="btn-confirmar-cita" onclick="confirmarCita()">Confirmar cita</button>
   </section>

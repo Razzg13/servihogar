@@ -149,6 +149,9 @@
   .rating-pill{font-family:'IBM Plex Mono'; font-size:11.5px; font-weight:600; background:#EAF3EC; color:var(--green); padding:4px 8px; border-radius:8px; display:inline-block; width:fit-content;}
   .rating-pill.dist{background:rgba(232,117,44,0.14); color:var(--orange-deep);}
   .rating-pill.disp-ahora{background:rgba(63,125,88,0.16); color:var(--green);}
+  .compare-check{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft); margin-top:10px; padding:0 18px 14px; cursor:pointer;}
+  .compare-check input{width:auto;}
+  #comparador-bar{position:sticky; bottom:16px; margin-top:16px; background:var(--navy); color:#fff; padding:12px 16px; border-radius:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; box-shadow:0 16px 32px -12px rgba(0,0,0,0.35); font-size:13px;}
   .badge-off{background:#F3E3E0; color:var(--red);}
   .worker-card .tarifa{font-size:12px; color:var(--ink-soft); font-family:'IBM Plex Mono';}
   .fav-btn{background:none; border:none; font-size:19px; color:#C7CBCA; line-height:1; padding:4px;}
