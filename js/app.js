@@ -6,9 +6,21 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ---------------- REALTIME ---------------- */
 let chatChannel = null;
+let chatPrevioChannel = null;
 let notifChannel = null;
 function cerrarCanalChat(){
   if(chatChannel){ sb.removeChannel(chatChannel); chatChannel = null; }
+}
+function cerrarCanalChatPrevio(){
+  if(chatPrevioChannel){ sb.removeChannel(chatPrevioChannel); chatPrevioChannel = null; }
+}
+function suscribirChatPrevio(conversacionId){
+  cerrarCanalChatPrevio();
+  chatPrevioChannel = sb.channel('mensajes-conv-'+conversacionId)
+    .on('postgres_changes', { event:'INSERT', schema:'public', table:'mensajes', filter:`conversacion_id=eq.${conversacionId}` }, ()=>{
+      if(state.conversacionActual===conversacionId) renderChatPrevio();
+    })
+    .subscribe();
 }
 function suscribirChat(citaId){
   cerrarCanalChat();
@@ -88,7 +100,7 @@ function mostrarToast(mensaje, tipo='info'){
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null };
+let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -199,6 +211,16 @@ async function usarMiUbicacionComoTrabajador(){
       if(msgEl) msgEl.innerHTML = `<div class="msg err">No pudimos acceder a tu ubicación. Revisa los permisos del navegador.</div>`;
     }
   );
+}
+async function toggleDisponibleAhora(){
+  const u = currentUser();
+  const nuevoValor = !u.disponible_ahora;
+  const { error } = await sb.from('profiles').update({ disponible_ahora: nuevoValor }).eq('id', u.id);
+  if(error){ mostrarToast('No se pudo actualizar tu disponibilidad.', 'err'); return; }
+  u.disponible_ahora = nuevoValor;
+  invalidarPerfil(u.id);
+  mostrarToast(nuevoValor ? 'Ahora aparecés como disponible ahora.' : 'Ya no aparecés como disponible ahora.', 'ok');
+  renderTrabajo();
 }
 let mapPerfil=null, mapBuscar=null;
 function tileLayer(map){
@@ -320,6 +342,7 @@ window.addEventListener('popstate', restoreFromHash);
 function nav(view){
   state.mobileNavOpen = false;
   cerrarCanalChat();
+  cerrarCanalChatPrevio();
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('v-'+view).classList.add('active');
   window.scrollTo({top:0, behavior:'instant'});
@@ -452,6 +475,7 @@ function workerCardHTML(w){
     <div class="worker-meta">
       <div style="display:flex; gap:6px; flex-wrap:wrap;">
         <div class="rating-pill">${rating ? '★ '+rating : 'Sin calificar'}</div>
+        ${w.disponible_ahora ? `<div class="rating-pill disp-ahora">🟢 Disponible ahora</div>` : ''}
         ${distancia!==null ? `<div class="rating-pill dist">📍 ${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</div>` : ''}
       </div>
       <div class="tarifa">Desde ${fmtCOP(w.tarifa)}</div>
@@ -621,11 +645,18 @@ async function logout(){
 }
 
 /* ---------------- BUSCAR ---------------- */
+function toggleFiltroDisponibleAhora(){
+  state.filtroDisponibleAhora = !state.filtroDisponibleAhora;
+  renderBuscar();
+}
 async function renderBuscar(){
   document.getElementById('buscar-chips').innerHTML = ['Todas', ...CATS.map(c=>c.n)].map(c=>{
     const active = (c==='Todas' && !state.catFiltro) || c===state.catFiltro;
     return `<button class="chipbtn ${active?'on':''}" onclick="setCatFiltro('${c==='Todas'?'':c}')">${c}</button>`;
   }).join('');
+  const btnDisp = document.getElementById('btn-disponible-ahora');
+  if(btnDisp) btnDisp.classList.toggle('btn-primary', !!state.filtroDisponibleAhora);
+  if(btnDisp) btnDisp.classList.toggle('btn-outline', !state.filtroDisponibleAhora);
 
   const q = (document.getElementById('buscar-text').value||'').toLowerCase();
   const trabajadores = await cargarTrabajadores();
@@ -636,6 +667,7 @@ async function renderBuscar(){
   if(state.miUbicacion && state.radioFiltro){
     results = results.filter(w=>distanciaKm(state.miUbicacion, coordsForWorker(w)) <= state.radioFiltro);
   }
+  if(state.filtroDisponibleAhora) results = results.filter(w=>w.disponible_ahora);
 
   const orden = document.getElementById('buscar-orden') ? document.getElementById('buscar-orden').value : 'relevancia';
   if(orden==='precio-asc') results = results.slice().sort((a,b)=>a.tarifa-b.tarifa);
@@ -701,7 +733,7 @@ async function verPerfil(workerId){
         <div class="card">
           <div class="profile-header">
             ${avatarHTML(w.nombre, w.foto_url)}
-            <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
+            <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''} ${w.disponible_ahora?'<span class="rating-pill disp-ahora" style="vertical-align:middle;">🟢 Disponible ahora</span>':''}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
             ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
           </div>
           <div class="spec-sheet">
@@ -730,6 +762,8 @@ async function verPerfil(workerId){
           <h3 style="font-size:14px; margin-bottom:12px;">Solicitar este servicio</h3>
           <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:16px;">Elige un día y una hora para que ${esc(w.nombre.split(' ')[0])} confirme tu cita.</p>
           <button class="btn btn-primary" style="width:100%;" onclick="irAAgendar('${w.id}')">Agendar cita</button>
+          ${u && u.tipo==='cliente' ? `<button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="contactarTrabajador('${w.id}')">💬 Preguntar antes de agendar</button>` : ''}
+          <div id="perfil-chat-panel" style="margin-top:12px;"></div>
         </div>
         <div class="card">
           <h3 style="font-size:14px; margin-bottom:10px;">Zona de trabajo</h3>
@@ -873,9 +907,10 @@ async function confirmarCita(){
     return;
   }
   const cliente = currentUser();
+  const inicio = parseFechaHoraCita(fecha, state.horaSel);
   if(state.citaReagendar){
     const { data: cita, error } = await sb.from('citas').update({
-      fecha, hora: state.horaSel, estado: 'pendiente'
+      fecha, hora: state.horaSel, estado: 'pendiente', inicio: inicio ? inicio.toISOString() : null
     }).eq('id', state.citaReagendar).select().single();
     if(error){
       msg.innerHTML = `<div class="msg err">No se pudo reagendar: ${esc(error.message)}</div>`;
@@ -890,7 +925,8 @@ async function confirmarCita(){
   }
   const { data: cita, error } = await sb.from('citas').insert({
     cliente_id: sessionUserId, trabajador_id: w.id,
-    fecha, hora: state.horaSel, estado: 'pendiente', pago: 'pendiente'
+    fecha, hora: state.horaSel, estado: 'pendiente', pago: 'pendiente',
+    inicio: inicio ? inicio.toISOString() : null
   }).select().single();
   if(error){
     msg.innerHTML = `<div class="msg err">No se pudo agendar: ${esc(error.message)}</div>`;
@@ -922,6 +958,8 @@ async function renderMisCitas(){
       if(c.estado==='completada' && !c.calificacion) accion = `<button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificar('${c.id}')">Calificar</button>`;
       if(c.calificacion) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion.estrellas)} calificado</span>`;
       if(c.estado==='pendiente' || c.estado==='aceptada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="reagendarCita('${c.id}')">Reagendar</button>`;
+      if(c.estado==='completada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="irAAgendar('${c.trabajadorId}')">Agendar de nuevo</button>`;
+      if(c.estado==='aceptada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="descargarIcs('${c.id}')">📅 Agregar a calendario</button>`;
       const pagoPill = c.pago==='pagado' ? `<span class="status-pill status-activo">pagado</span>` :
         (c.estado==='aceptada'||c.estado==='completada') ? `<button class="btn btn-outline" style="font-size:11px;padding:5px 9px;" onclick="simularPago('${c.id}')">Simular pago</button>` :
         `<span class="status-pill status-pendiente">pendiente</span>`;
@@ -951,11 +989,37 @@ async function marcarCompletada(id){
   renderMisCitas();
 }
 async function simularPago(id){
-  const { data: c } = await sb.from('citas').update({ pago: 'pagado' }).eq('id', id).select().single();
-  const w = await obtenerPerfil(normalizarCita(c).trabajadorId);
+  const { data: citaPrevia } = await sb.from('citas').select('trabajador_id').eq('id', id).single();
+  const w = citaPrevia ? await obtenerPerfil(citaPrevia.trabajador_id) : null;
+  // No hay un monto por servicio guardado en ningún lado; se usa la tarifa
+  // actual del trabajador como aproximación para el panel de ingresos.
+  const { data: c } = await sb.from('citas').update({ pago: 'pagado', monto: w ? w.tarifa : null }).eq('id', id).select().single();
   if(w) addNotificacion(w.id, `Pago simulado recibido por el servicio del ${c.fecha}.`);
   mostrarToast('Pago simulado registrado.', 'ok');
   (document.getElementById('v-miscitas').classList.contains('active') ? renderMisCitas : renderTrabajo)();
+}
+async function renderIngresos(){
+  const u = currentUser();
+  const box = document.getElementById('work-ingresos');
+  if(!u || u.tipo!=='trabajador'){ box.innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tus ingresos.</div>`; return; }
+  const { data } = await sb.from('citas').select('fecha, monto').eq('trabajador_id', u.id).eq('pago', 'pagado');
+  const pagos = data || [];
+  const total = pagos.reduce((a,c)=>a+(c.monto||0), 0);
+  const porMes = new Map(); // "AAAA-MM · Mes AAAA" -> suma (la clave ordena bien y se ve linda)
+  pagos.forEach(c=>{
+    const fecha = parseFechaHoraCita(c.fecha, '12:00 pm');
+    const clave = fecha ? `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')} · ${MESES[fecha.getMonth()]} ${fecha.getFullYear()}` : '0000 · Sin fecha';
+    porMes.set(clave, (porMes.get(clave)||0) + (c.monto||0));
+  });
+  const filas = [...porMes.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
+  box.innerHTML = `
+    <div class="admin-summary" style="grid-template-columns:repeat(2,1fr); max-width:420px;">
+      <div class="admin-stat"><span>Total cobrado</span><b>${fmtCOP(total)}</b></div>
+      <div class="admin-stat"><span>Servicios pagados</span><b>${pagos.length}</b></div>
+    </div>
+    ${filas.length ? `<table><thead><tr><th>Mes</th><th>Ingresos</th></tr></thead><tbody>
+      ${filas.map(([clave, monto])=>`<tr><td>${esc(clave.split(' · ')[1])}</td><td>${fmtCOP(monto)}</td></tr>`).join('')}
+    </tbody></table>` : `<div class="empty-note">Todavía no registraste ningún pago.</div>`}`;
 }
 function abrirCalificar(id){
   const panel = document.getElementById('calificar-panel');
@@ -986,6 +1050,29 @@ async function enviarCalificacion(citaId){
   await sb.from('citas').update({ calificacion: { estrellas: state.estrellasSel, comentario } }).eq('id', citaId);
   invalidarPerfil(data.worker_id);
   renderMisCitas();
+}
+function abrirCalificarCliente(citaId){
+  const panel = document.getElementById('calificar-cliente-panel');
+  panel.innerHTML = `<div class="card">
+    <h3 style="font-size:14px;margin-bottom:10px;">Califica a este cliente</h3>
+    <div class="stars-input" id="stars-input-cliente">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="setStarsCliente(${n})">★</span>`).join('')}</div>
+    <textarea id="calif-cliente-comentario" placeholder="Notas sobre este cliente (opcional)..." rows="3" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;margin-bottom:12px;"></textarea>
+    <button class="btn btn-primary" onclick="enviarCalificacionCliente('${citaId}')">Enviar calificación</button>
+  </div>`;
+  state.estrellasSelCliente = 5; setStarsCliente(5);
+}
+function setStarsCliente(n){
+  state.estrellasSelCliente = n;
+  document.querySelectorAll('#stars-input-cliente span').forEach(s=>s.classList.toggle('on', Number(s.dataset.n)<=n));
+}
+async function enviarCalificacionCliente(citaId){
+  const comentario = document.getElementById('calif-cliente-comentario').value.trim();
+  const { error } = await sb.from('citas').update({
+    calificacion_trabajador: { estrellas: state.estrellasSelCliente, comentario }
+  }).eq('id', citaId);
+  if(error){ mostrarToast('No se pudo enviar la calificación.', 'err'); return; }
+  mostrarToast('Calificación enviada.', 'ok');
+  renderTrabajo();
 }
 
 /* ---------------- CHAT POR CITA ---------------- */
@@ -1030,6 +1117,82 @@ async function enviarMensaje(citaId){
   renderChat();
 }
 
+/* ---------------- CHAT ANTES DE AGENDAR (sin cita todavía) ---------------- */
+async function contactarTrabajador(workerId){
+  const u = currentUser();
+  if(!u || u.tipo!=='cliente') return;
+  const { data: existente } = await sb.from('conversaciones').select('id')
+    .eq('cliente_id', u.id).eq('trabajador_id', workerId).maybeSingle();
+  let conversacionId = existente && existente.id;
+  if(!conversacionId){
+    const { data: nueva, error } = await sb.from('conversaciones')
+      .insert({ cliente_id: u.id, trabajador_id: workerId }).select('id').single();
+    if(error){
+      document.getElementById('perfil-chat-panel').innerHTML = `<div class="msg err">No se pudo abrir el chat: ${esc(error.message)}</div>`;
+      return;
+    }
+    conversacionId = nueva.id;
+  }
+  abrirChatPrevio(conversacionId);
+}
+function abrirChatPrevio(conversacionId){
+  state.conversacionActual = conversacionId;
+  renderChatPrevio();
+  suscribirChatPrevio(conversacionId);
+}
+async function renderChatPrevio(){
+  const conversacionId = state.conversacionActual;
+  const { data: conv } = await sb.from('conversaciones').select('*').eq('id', conversacionId).single();
+  if(!conv) return;
+  const u = currentUser();
+  const activa = document.querySelector('.view.active').id;
+  const panel = document.getElementById(activa==='v-trabajo' ? 'work-chat-previo-panel' : 'perfil-chat-panel');
+  if(!panel) return;
+  const otro = await obtenerPerfil(u.tipo==='cliente' ? conv.trabajador_id : conv.cliente_id);
+  if(!otro) return;
+  const { data: mensajes } = await sb.from('mensajes').select('*').eq('conversacion_id', conversacionId).order('created_at');
+  panel.innerHTML = `<div class="card">
+    <h3 style="font-size:14px;margin-bottom:10px;">Chat con ${esc(otro.nombre)}</h3>
+    <div class="chat-box" id="chat-box-previo">${(mensajes||[]).map(m=>`<div class="chat-msg ${m.de===u.id?'mio':''}"><b>${m.de===u.id?'Tú':esc(otro.nombre.split(' ')[0])}:</b> ${esc(m.texto)}</div>`).join('') || '<div class="empty-note" style="padding:10px;">Todavía no hay mensajes. Escribe el primero.</div>'}</div>
+    <div style="display:flex; gap:8px;">
+      <input id="chat-input-previo" placeholder="Escribe un mensaje..." style="flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;" onkeydown="if(event.key==='Enter') enviarMensajePrevio('${conversacionId}')">
+      <button class="btn btn-primary" onclick="enviarMensajePrevio('${conversacionId}')">Enviar</button>
+    </div>
+  </div>`;
+  const box = document.getElementById('chat-box-previo'); if(box) box.scrollTop = box.scrollHeight;
+}
+async function enviarMensajePrevio(conversacionId){
+  const input = document.getElementById('chat-input-previo');
+  const texto = input.value.trim();
+  if(!texto) return;
+  const u = currentUser();
+  const { data: conv } = await sb.from('conversaciones').select('*').eq('id', conversacionId).single();
+  if(!conv) return;
+  await sb.from('mensajes').insert({ conversacion_id: conversacionId, de: u.id, texto });
+  const otroId = u.tipo==='cliente' ? conv.trabajador_id : conv.cliente_id;
+  addNotificacion(otroId, `Nuevo mensaje de ${u.nombre.split(' ')[0]}.`);
+  input.value = '';
+  renderChatPrevio();
+}
+async function renderMensajesTrabajador(){
+  const u = currentUser();
+  const box = document.getElementById('work-mensajes');
+  if(!u || u.tipo!=='trabajador'){ box.innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tus mensajes.</div>`; return; }
+  const { data } = await sb.from('conversaciones').select('*').eq('trabajador_id', u.id).order('created_at', {ascending:false});
+  const conversaciones = data || [];
+  if(!conversaciones.length){ box.innerHTML = `<div class="empty-note">Todavía nadie te escribió antes de agendar.</div>`; return; }
+  const clientes = await obtenerPerfiles(conversaciones.map(c=>c.cliente_id));
+  const clientePorId = new Map(clientes.map(c=>[c && c.id, c]));
+  box.innerHTML = `<div class="card" style="max-width:520px; margin-bottom:16px;">
+    <h3 style="font-size:15px; margin-bottom:12px;">Conversaciones</h3>
+    ${conversaciones.map(c=>{
+      const cli = clientePorId.get(c.cliente_id);
+      return `<button type="button" class="btn btn-outline" style="width:100%;margin-bottom:8px;text-align:left;" onclick="abrirChatPrevio('${c.id}')">💬 ${cli?esc(cli.nombre):'Cliente'}</button>`;
+    }).join('')}
+  </div>
+  <div id="work-chat-previo-panel" style="max-width:520px;"></div>`;
+}
+
 /* ---------------- REPORTAR ---------------- */
 async function abrirReportar(citaId){
   const panel = document.getElementById('reportar-panel');
@@ -1057,6 +1220,61 @@ async function enviarReporte(citaId){
   }
   document.getElementById('reportar-panel').innerHTML = `<div class="msg ok">✓ Reporte enviado. El administrador lo revisará pronto.</div>`;
   mostrarToast('Reporte enviado.', 'ok');
+}
+
+/* ---------------- CALENDARIO PERSONAL (.ics) ---------------- */
+// La fecha se guarda como texto en español (ej. "15 de agosto" o "15 de
+// agosto de 2027"); hay que revertir ese formato a un Date real para el evento.
+function parseFechaHoraCita(fecha, hora){
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const m = (fecha||'').match(/^(\d+) de (\w+)(?: de (\d+))?$/i);
+  if(!m) return null;
+  const dia = Number(m[1]);
+  const mes = meses.indexOf(m[2].toLowerCase());
+  if(mes<0) return null;
+  const anio = m[3] ? Number(m[3]) : new Date().getFullYear();
+  const hm = (hora||'').match(/^(\d+):(\d+)\s*(am|pm)$/i);
+  if(!hm) return null;
+  let h = Number(hm[1]) % 12;
+  if(/pm/i.test(hm[3])) h += 12;
+  return new Date(anio, mes, dia, h, Number(hm[2]));
+}
+function icsFecha(d){
+  const p = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`;
+}
+function icsFechaUTC(d){
+  const p = n=>String(n).padStart(2,'0');
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
+}
+function icsEscape(s){ return String(s).replace(/[\\,;]/g, m=>'\\'+m).replace(/\n/g,'\\n'); }
+async function descargarIcs(citaId){
+  const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
+  const c = normalizarCita(citaRaw);
+  if(!c) return;
+  const inicio = parseFechaHoraCita(c.fecha, c.hora);
+  if(!inicio){ mostrarToast('No se pudo generar el evento de calendario.', 'err'); return; }
+  const fin = new Date(inicio.getTime() + 60*60*1000); // asume 1 hora de duración
+  const w = await obtenerPerfil(c.trabajadorId);
+  const titulo = icsEscape(`Servicio Hogandia${w ? ' — ' + w.categoria : ''}`);
+  const desc = icsEscape(`Cita con ${w ? w.nombre : 'el trabajador'} agendada a través de Hogandia.`);
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Hogandia//ES',
+    'BEGIN:VEVENT',
+    `UID:${c.id}@hogandia`,
+    `DTSTAMP:${icsFechaUTC(new Date())}`,
+    `DTSTART:${icsFecha(inicio)}`,
+    `DTEND:${icsFecha(fin)}`,
+    `SUMMARY:${titulo}`,
+    `DESCRIPTION:${desc}`,
+    'END:VEVENT', 'END:VCALENDAR'
+  ].join('\r\n');
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `cita-hogandia-${c.id}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* ---------------- COMPROBANTE (imprimir / descargar) ---------------- */
@@ -1095,9 +1313,15 @@ async function abrirComprobante(citaId){
 /* ---------------- PANEL TRABAJADOR ---------------- */
 function switchWorkTab(tab){
   document.getElementById('wtab-solicitudes').classList.toggle('on', tab==='solicitudes');
+  document.getElementById('wtab-mensajes').classList.toggle('on', tab==='mensajes');
+  document.getElementById('wtab-ingresos').classList.toggle('on', tab==='ingresos');
   document.getElementById('wtab-perfil').classList.toggle('on', tab==='perfil');
   document.getElementById('work-solicitudes').classList.toggle('hidden', tab!=='solicitudes');
+  document.getElementById('work-mensajes').classList.toggle('hidden', tab!=='mensajes');
+  document.getElementById('work-ingresos').classList.toggle('hidden', tab!=='ingresos');
   document.getElementById('work-perfil').classList.toggle('hidden', tab!=='perfil');
+  if(tab==='ingresos') renderIngresos();
+  if(tab==='mensajes') renderMensajesTrabajador();
 }
 async function renderTrabajo(){
   const u = currentUser();
@@ -1107,19 +1331,35 @@ async function renderTrabajo(){
   const propias = (data||[]).map(normalizarCita);
   const clientes = await obtenerPerfiles(propias.map(c=>c.clienteId));
   const clientePorId = new Map(clientes.map(c=>[c && c.id, c]));
+  // Reputación del cliente vista desde este trabajador: promedio de las
+  // veces que ya lo calificó (no es un puntaje global de otros trabajadores,
+  // las políticas de citas no dejan ver citas ajenas).
+  const misCalifClientes = new Map(); // clienteId -> {suma, n}
+  propias.forEach(c=>{
+    if(c.calificacion_trabajador){
+      const acc = misCalifClientes.get(c.clienteId) || {suma:0, n:0};
+      acc.suma += c.calificacion_trabajador.estrellas; acc.n += 1;
+      misCalifClientes.set(c.clienteId, acc);
+    }
+  });
   document.getElementById('work-solicitudes').innerHTML = propias.length ? `
     <table><thead><tr><th>Cliente</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Pago</th><th>Acciones</th></tr></thead><tbody>
     ${propias.map(c=>{
       const cli = clientePorId.get(c.clienteId);
+      const califCli = misCalifClientes.get(c.clienteId);
+      const nombreCliente = `${cli?esc(cli.nombre):'—'}${califCli ? ` <span class="mono" style="font-size:10.5px;color:var(--ink-soft);" title="Tu calificación a este cliente">★${(califCli.suma/califCli.n).toFixed(1)}</span>` : ''}`;
       let accion = '';
       if(c.estado==='pendiente') accion = `<div class="row-actions"><button class="acc" onclick="responderCita('${c.id}','aceptada')">Aceptar</button><button class="rej" onclick="responderCita('${c.id}','rechazada')">Rechazar</button></div>`;
-      if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}')">Cancelar</button>`;
-      return `<tr><td>${cli?esc(cli.nombre):'—'}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
+      if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}')">Cancelar</button> <button onclick="descargarIcs('${c.id}')">📅 Calendario</button>`;
+      if(c.estado==='completada' && !c.calificacion_trabajador) accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificarCliente('${c.id}')">Calificar cliente</button>`;
+      if(c.calificacion_trabajador) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion_trabajador.estrellas)} calificado</span>`;
+      return `<tr><td>${nombreCliente}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
         <td><span class="status-pill status-${c.estado}">${c.estado}</span></td>
         <td><span class="status-pill status-${c.pago==='pagado'?'activo':'pendiente'}">${c.pago||'pendiente'}</span></td>
         <td><div class="row-actions">${accion}<button onclick="abrirChat('${c.id}')">Chat</button></div></td></tr>`;
     }).join('')}
     </tbody></table>
+    <div id="calificar-cliente-panel" style="margin-top:20px;"></div>
     <div id="chat-panel-work" style="margin-top:20px;"></div>` : `<div class="empty-note">Todavía no tienes solicitudes de servicio.</div>`;
 
   const verifBadge = u.verificado ? `<span class="verif-badge">✓ Verificado</span>`
@@ -1166,6 +1406,10 @@ async function renderTrabajo(){
         <select id="wp-cat">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
       </div>
       <div class="field"><label for="wp-zona">Zona</label><input id="wp-zona" value="${esc(u.zona)}"></div>
+      <div class="field">
+        <button type="button" class="btn ${u.disponible_ahora?'btn-primary':'btn-outline'}" onclick="toggleDisponibleAhora()">🟢 ${u.disponible_ahora ? 'Disponible ahora (tocá para desactivar)' : 'Marcarme disponible ahora'}</button>
+        <p style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">Activalo para que los clientes vean que podés atender pedidos urgentes hoy mismo. Acordate de desactivarlo cuando ya no puedas.</p>
+      </div>
       <div class="field">
         <button type="button" class="btn btn-outline" id="btn-wp-ubicacion" onclick="usarMiUbicacionComoTrabajador()">📍 ${u.lat!=null ? 'Actualizar mi ubicación' : 'Usar mi ubicación actual'}</button>
         <p style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">

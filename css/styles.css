@@ -148,6 +148,7 @@
   .worker-card .worker-meta{display:flex; justify-content:space-between; align-items:center; padding:14px 18px 0;}
   .rating-pill{font-family:'IBM Plex Mono'; font-size:11.5px; font-weight:600; background:#EAF3EC; color:var(--green); padding:4px 8px; border-radius:8px; display:inline-block; width:fit-content;}
   .rating-pill.dist{background:rgba(232,117,44,0.14); color:var(--orange-deep);}
+  .rating-pill.disp-ahora{background:rgba(63,125,88,0.16); color:var(--green);}
   .badge-off{background:#F3E3E0; color:var(--red);}
   .worker-card .tarifa{font-size:12px; color:var(--ink-soft); font-family:'IBM Plex Mono';}
   .fav-btn{background:none; border:none; font-size:19px; color:#C7CBCA; line-height:1; padding:4px;}
