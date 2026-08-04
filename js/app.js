@@ -83,7 +83,7 @@ function mostrarToast(mensaje, tipo='info'){
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null };
+let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -152,6 +152,8 @@ function obtenerMiUbicacion(){
         orden.appendChild(opt);
       }
       if(orden) orden.value = 'distancia';
+      const radio = document.getElementById('buscar-radio');
+      if(radio) radio.classList.remove('hidden');
       msg.innerHTML = `<div class="msg ok">✓ Mostrando distancias desde tu ubicación.</div>`;
       renderBuscar();
     },
@@ -282,7 +284,7 @@ function avatarHTML(nombre, fotoUrl){
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
-const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin'];
+const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin','resetpass'];
 let suprimirPush = false; // true mientras restauramos una ruta (popstate / carga inicial): no volver a empujar historial
 
 function routeHashFor(view){
@@ -414,9 +416,11 @@ async function renderHome(){
   document.getElementById('stat-workers').textContent = trabajadores.length;
   document.getElementById('stat-jobs').textContent = totalCitas || 0;
   const todasResenas = trabajadores.flatMap(w=>w.resenas||[]);
-  document.getElementById('stat-rating').textContent = todasResenas.length
+  const ratingProm = todasResenas.length
     ? (todasResenas.reduce((a,r)=>a+r.estrellas,0)/todasResenas.length).toFixed(1)
     : '—';
+  document.getElementById('stat-rating').textContent = ratingProm;
+  document.getElementById('hf-rating-val').textContent = ratingProm;
 
   document.getElementById('home-cats').innerHTML = CATS.map(c=>
     `<div class="cat-card" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></div>`
@@ -486,7 +490,50 @@ function switchAuthTab(tab){
   document.getElementById('tab-register').classList.toggle('on', tab==='register');
   document.getElementById('form-login').classList.toggle('hidden', tab!=='login');
   document.getElementById('form-register').classList.toggle('hidden', tab!=='register');
+  document.getElementById('form-forgot').classList.add('hidden');
   document.getElementById('auth-msg').innerHTML='';
+}
+function mostrarRecuperar(){
+  document.getElementById('tab-login').classList.remove('on');
+  document.getElementById('tab-register').classList.remove('on');
+  document.getElementById('form-login').classList.add('hidden');
+  document.getElementById('form-register').classList.add('hidden');
+  document.getElementById('form-forgot').classList.remove('hidden');
+  document.getElementById('auth-msg').innerHTML='';
+}
+async function enviarRecuperacion(e){
+  e.preventDefault();
+  const email = document.getElementById('forgot-email').value.trim().toLowerCase();
+  const msg = document.getElementById('auth-msg');
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if(error){
+    msg.innerHTML = `<div class="msg err">No se pudo enviar el correo. Intenta de nuevo.</div>`;
+    return false;
+  }
+  msg.innerHTML = `<div class="msg ok">✓ Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña.</div>`;
+  document.getElementById('form-forgot').reset();
+  return false;
+}
+async function guardarNuevaContrasena(e){
+  e.preventDefault();
+  const p1 = document.getElementById('resetpass-pass').value;
+  const p2 = document.getElementById('resetpass-pass2').value;
+  const msg = document.getElementById('resetpass-msg');
+  if(p1 !== p2){
+    msg.innerHTML = `<div class="msg err">Las contraseñas no coinciden.</div>`;
+    return false;
+  }
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if(error){
+    msg.innerHTML = `<div class="msg err">No se pudo actualizar la contraseña. El enlace puede haber expirado — solicita uno nuevo desde "Iniciar sesión".</div>`;
+    return false;
+  }
+  await cargarPerfilActual();
+  mostrarToast('Contraseña actualizada correctamente.', 'ok');
+  nav(currentProfile ? (currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home') : 'home');
+  return false;
 }
 function toggleWorkerFields(){
   document.getElementById('worker-fields').classList.toggle('hidden', document.getElementById('reg-tipo').value!=='trabajador');
@@ -580,6 +627,9 @@ async function renderBuscar(){
   if(state.catFiltro) results = results.filter(w=>w.categoria===state.catFiltro);
   if(q) results = results.filter(w=>w.nombre.toLowerCase().includes(q) || w.categoria.toLowerCase().includes(q)
     || w.zona.toLowerCase().includes(q) || (w.servicios||[]).some(s=>s.toLowerCase().includes(q)));
+  if(state.miUbicacion && state.radioFiltro){
+    results = results.filter(w=>distanciaKm(state.miUbicacion, coordsForWorker(w)) <= state.radioFiltro);
+  }
 
   const orden = document.getElementById('buscar-orden') ? document.getElementById('buscar-orden').value : 'relevancia';
   if(orden==='precio-asc') results = results.slice().sort((a,b)=>a.tarifa-b.tarifa);
@@ -606,6 +656,7 @@ async function renderBuscar(){
   if(state.vistaBuscar==='mapa') initMapaBuscar(results);
 }
 function setCatFiltro(cat){ state.catFiltro = cat || null; renderBuscar(); }
+function setRadioFiltro(v){ state.radioFiltro = v ? Number(v) : null; renderBuscar(); }
 function setVistaBuscar(vista){
   state.vistaBuscar = vista;
   document.getElementById('btn-vista-lista').classList.toggle('on', vista==='lista');
@@ -1009,6 +1060,7 @@ async function renderTrabajo(){
       const cli = clientePorId.get(c.clienteId);
       let accion = '';
       if(c.estado==='pendiente') accion = `<div class="row-actions"><button class="acc" onclick="responderCita('${c.id}','aceptada')">Aceptar</button><button class="rej" onclick="responderCita('${c.id}','rechazada')">Rechazar</button></div>`;
+      if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}')">Cancelar</button>`;
       return `<tr><td>${cli?esc(cli.nombre):'—'}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
         <td><span class="status-pill status-${c.estado}">${c.estado}</span></td>
         <td><span class="status-pill status-${c.pago==='pagado'?'activo':'pendiente'}">${c.pago||'pendiente'}</span></td>
@@ -1136,6 +1188,17 @@ async function responderCita(id, estado){
     if(cliente && w) addNotificacion(cliente.id, `${w.nombre} ${estado==='aceptada'?'aceptó':'rechazó'} tu cita del ${c.fecha}.`);
   }
   mostrarToast(estado==='aceptada' ? 'Cita aceptada.' : 'Cita rechazada.', 'ok');
+  renderTrabajo();
+}
+async function cancelarCitaTrabajador(id){
+  if(!confirm('¿Seguro que quieres cancelar esta cita ya aceptada? Se le avisará al cliente.')) return;
+  const { data: citaRaw } = await sb.from('citas').update({ estado:'cancelada' }).eq('id', id).select().single();
+  const c = normalizarCita(citaRaw);
+  if(c){
+    const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
+    if(cliente && w) addNotificacion(cliente.id, `${w.nombre} canceló tu cita del ${c.fecha}.`);
+  }
+  mostrarToast('Cita cancelada.', 'ok');
   renderTrabajo();
 }
 async function guardarPerfilTrabajador(){
@@ -1304,11 +1367,22 @@ async function renderEstadisticas(){
 /* ---------------- INIT ---------------- */
 (async function initApp(){
   applyTheme(loadTheme());
+  // El enlace de recuperación de contraseña de Supabase redirige aquí mismo con
+  // `type=recovery` en el hash; hay que mostrar el formulario de nueva contraseña
+  // en vez de la ruta normal (y no tratar ese hash como una vista inválida).
+  const esRecuperacion = /type=recovery/.test(location.hash);
   const { data: { session } } = await sb.auth.getSession();
   if(session){
     sessionUserId = session.user.id;
     await cargarPerfilActual();
-    suscribirNotificaciones(sessionUserId);
+    if(!esRecuperacion) suscribirNotificaciones(sessionUserId);
+  }
+  if(esRecuperacion){
+    suprimirPush = true;
+    nav('resetpass');
+    suprimirPush = false;
+    history.replaceState(null, '', '#/resetpass');
+    return;
   }
   if(location.hash){
     restoreFromHash();
