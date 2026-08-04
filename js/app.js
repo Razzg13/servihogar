@@ -119,6 +119,12 @@ function coordsForZona(zona){
   const jitter = (hash/1000 - 0.5) * 0.03;
   return [IBAGUE_CENTRO[0]+jitter, IBAGUE_CENTRO[1]-jitter];
 }
+// Usa la ubicación real del trabajador (lat/lng) si la definió; si no,
+// cae al punto aproximado por nombre de zona.
+function coordsForWorker(w){
+  if(w.lat!=null && w.lng!=null) return [w.lat, w.lng];
+  return coordsForZona(w.zona);
+}
 // Distancia en km entre dos puntos [lat, lng] (fórmula de Haversine)
 function distanciaKm([lat1, lng1], [lat2, lng2]){
   const R = 6371;
@@ -152,6 +158,38 @@ function obtenerMiUbicacion(){
     ()=>{
       if(btn){ btn.disabled = false; btn.textContent = '📍 Cerca de mí'; }
       msg.innerHTML = `<div class="msg err">No pudimos acceder a tu ubicación. Revisa los permisos del navegador.</div>`;
+    }
+  );
+}
+async function usarMiUbicacionComoTrabajador(){
+  const u = currentUser();
+  const msgEl = document.getElementById('wp-ubicacion-msg');
+  if(!navigator.geolocation){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">Tu navegador no soporta ubicación.</div>`;
+    return;
+  }
+  const btn = document.getElementById('btn-wp-ubicacion');
+  if(btn){ btn.disabled = true; btn.textContent = 'Ubicando...'; }
+  navigator.geolocation.getCurrentPosition(
+    async pos=>{
+      // Desplazamiento aleatorio de ~100-150 m: precisa para "cerca de mí",
+      // pero nunca la dirección exacta de la casa del trabajador.
+      const jitter = () => (Math.random()-0.5) * 0.0025;
+      const lat = pos.coords.latitude + jitter();
+      const lng = pos.coords.longitude + jitter();
+      const { error } = await sb.from('profiles').update({ lat, lng }).eq('id', u.id);
+      if(btn){ btn.disabled = false; }
+      if(error){
+        if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo guardar la ubicación: ${esc(error.message)}</div>`;
+        return;
+      }
+      invalidarPerfil(u.id);
+      if(msgEl) msgEl.innerHTML = `<div class="msg ok">✓ Ubicación guardada. Ya aparecés más preciso en "cerca de mí".</div>`;
+      renderTrabajo();
+    },
+    ()=>{
+      if(btn){ btn.disabled = false; btn.textContent = '📍 Usar mi ubicación actual'; }
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">No pudimos acceder a tu ubicación. Revisa los permisos del navegador.</div>`;
     }
   );
 }
@@ -393,7 +431,7 @@ function workerCardHTML(w){
   const rating = avg(w.resenas);
   const u = currentUser();
   const esFav = u && u.tipo==='cliente' && (u.favoritos||[]).includes(w.id);
-  const distancia = state.miUbicacion ? distanciaKm(state.miUbicacion, coordsForZona(w.zona)) : null;
+  const distancia = state.miUbicacion ? distanciaKm(state.miUbicacion, coordsForWorker(w)) : null;
   return `<div class="worker-card ticket" onclick="verPerfil('${w.id}')">
     <div class="worker-top">
       ${avatarHTML(w.nombre, w.foto_url)}
@@ -549,7 +587,7 @@ async function renderBuscar(){
   if(orden==='calificacion') results = results.slice().sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0));
   if(orden==='distancia' && state.miUbicacion){
     results = results.slice().sort((a,b)=>
-      distanciaKm(state.miUbicacion, coordsForZona(a.zona)) - distanciaKm(state.miUbicacion, coordsForZona(b.zona))
+      distanciaKm(state.miUbicacion, coordsForWorker(a)) - distanciaKm(state.miUbicacion, coordsForWorker(b))
     );
   }
 
@@ -581,7 +619,7 @@ function initMapaBuscar(results){
   mapBuscar = L.map('buscar-mapa-box', {zoomControl:true, attributionControl:false}).setView(state.miUbicacion || IBAGUE_CENTRO, 12);
   tileLayer(mapBuscar);
   results.forEach(w=>{
-    const coords = coordsForZona(w.zona);
+    const coords = coordsForWorker(w);
     L.marker(coords, {icon:pinIcon('#1C2B39')}).addTo(mapBuscar)
       .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}<br><a href="#" onclick="verPerfil('${w.id}'); return false;">Ver perfil →</a>`);
   });
@@ -638,7 +676,7 @@ async function verPerfil(workerId){
 }
 
 function initMapaPerfil(w){
-  const coords = coordsForZona(w.zona);
+  const coords = coordsForWorker(w);
   if(mapPerfil){ mapPerfil.remove(); mapPerfil = null; }
   mapPerfil = L.map('perfil-mapa', {zoomControl:false, attributionControl:false}).setView(coords, 13);
   tileLayer(mapPerfil);
@@ -926,7 +964,7 @@ async function abrirComprobante(citaId){
   const c = normalizarCita(citaRaw);
   if(!c){ win.close(); return; }
   const [w, cliente] = await Promise.all([obtenerPerfil(c.trabajadorId), obtenerPerfil(c.clienteId)]);
-  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Comprobante ServiHogar</title>
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Comprobante Hogandia</title>
   <style>
     body{font-family:Arial,sans-serif; padding:28px; color:#14201B;}
     h1{font-size:18px; margin-bottom:4px;} .sub{color:#5B6A66; font-size:12px; margin-bottom:20px;}
@@ -934,7 +972,7 @@ async function abrirComprobante(citaId){
     .row b{color:#1C2B39;}
     .stamp{margin-top:20px; padding:10px; background:#EAF3EC; color:#3F7D58; text-align:center; border-radius:8px; font-weight:bold;}
   </style></head><body>
-  <h1>ServiHogar — Orden de servicio</h1>
+  <h1>Hogandia — Orden de servicio</h1>
   <div class="sub">N° ${c.id.toUpperCase()}</div>
   <div class="row"><span>Cliente</span><b>${esc(cliente?cliente.nombre:'—')}</b></div>
   <div class="row"><span>Trabajador</span><b>${esc(w?w.nombre:'—')}</b></div>
@@ -944,7 +982,7 @@ async function abrirComprobante(citaId){
   <div class="row"><span>Hora</span><b>${esc(c.hora)}</b></div>
   <div class="row"><span>Estado</span><b>${esc(c.estado)}</b></div>
   <div class="row"><span>Pago</span><b>${esc(c.pago)}</b></div>
-  <div class="stamp">Documento generado por ServiHogar — comprobante no oficial</div>
+  <div class="stamp">Documento generado por Hogandia — comprobante no oficial</div>
   <script>window.onload = () => window.print();</script>
   </body></html>`);
   win.document.close();
@@ -1012,6 +1050,13 @@ async function renderTrabajo(){
         <select id="wp-cat">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
       </div>
       <div class="field"><label for="wp-zona">Zona</label><input id="wp-zona" value="${esc(u.zona)}"></div>
+      <div class="field">
+        <button type="button" class="btn btn-outline" id="btn-wp-ubicacion" onclick="usarMiUbicacionComoTrabajador()">📍 ${u.lat!=null ? 'Actualizar mi ubicación' : 'Usar mi ubicación actual'}</button>
+        <p style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">
+          ${u.lat!=null ? 'Ya estás usando tu ubicación real (con un pequeño margen, no tu dirección exacta) para que los clientes te encuentren mejor por cercanía.' : 'Además de la zona, podés compartir tu ubicación real para aparecer más preciso en "cerca de mí" — se guarda con un margen de seguridad, nunca tu dirección exacta.'}
+        </p>
+        <div id="wp-ubicacion-msg" role="status" aria-live="polite" style="margin-top:6px;"></div>
+      </div>
       <div class="field"><label for="wp-exp">Años de experiencia</label><input type="number" id="wp-exp" min="0" value="${u.experiencia}"></div>
       <div class="field"><label for="wp-tarifa">Tarifa desde (COP)</label><input type="number" id="wp-tarifa" min="0" value="${u.tarifa}"></div>
       <div class="field"><label for="wp-servicios">Servicios (separados por coma)</label><input id="wp-servicios" value="${esc(u.servicios.join(', '))}"></div>
