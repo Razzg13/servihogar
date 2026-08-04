@@ -43,21 +43,22 @@ supabase functions deploy notificar-email
 Al terminar te va a dar una URL como:
 `https://fqxnppxekhqsjgpcwofb.supabase.co/functions/v1/notificar-email`
 
-## 5. Crear el Database Webhook
+## 5. Conexión con la app
 
-En el Supabase Dashboard → **Database** → **Webhooks** → **Create a new hook**:
+Lo ideal sería un Database Webhook (Database → Webhooks) que dispare la
+función automáticamente al insertarse una fila en `notificaciones`, sin
+tocar el front-end. Si tu proyecto tira el error `schema "supabase_functions"
+does not exist` al crearlo (pasa en algunos proyectos nuevos, falta esa
+infraestructura interna), usá en su lugar la llamada directa que ya está en
+`js/app.js`: la función `addNotificacion(...)` invoca `notificar-email` justo
+después de guardar la notificación en la tabla. No requiere ninguna
+configuración extra — ya funciona apenas desplegás la función y guardás el
+secreto de Resend.
 
-- **Name**: `notificar-email`
-- **Table**: `notificaciones`
-- **Events**: solo `Insert`
-- **Type**: `Supabase Edge Functions`
-- **Edge Function**: `notificar-email`
-- **HTTP Headers**: dejá el que Supabase agrega automáticamente (incluye la
-  autorización con el service role)
-
-Guardá. Desde ese momento, cada `addNotificacion(...)` del código (citas
-nuevas, aceptadas, rechazadas, canceladas, reagendadas) también va a mandar
-un correo real, sin tocar nada más del front-end.
+Si en el futuro Supabase resuelve el problema del webhook, se puede volver a
+esa opción (más robusta porque no depende de que el cliente esté conectado)
+quitando la llamada de `addNotificacion` y creando el webhook como se
+describe arriba.
 
 ## Probarlo
 
