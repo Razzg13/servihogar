@@ -49,8 +49,8 @@
   /* NAV */
   header{background:var(--navy); position:sticky; top:0; z-index:50;}
   nav.wrap{display:flex; align-items:center; justify-content:space-between; min-height:68px; gap:20px;}
-  .brand{display:flex; align-items:center; gap:10px; color:#fff; font-family:'Space Grotesk'; font-weight:700; font-size:19px;}
-  .brand .mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(145deg,var(--orange),var(--orange-deep));display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-logo{height:34px; width:auto; display:block;}
   .menu-toggle{display:none; background:rgba(255,255,255,0.08); border:1.5px solid rgba(255,255,255,0.24); color:#fff; width:38px; height:38px; border-radius:10px; font-size:18px; font-weight:700; align-items:center; justify-content:center;}
   .menu-toggle.on{background:var(--orange); border-color:var(--orange);}
   .navlinks{display:flex; gap:4px; flex-wrap:wrap; min-width:0;}
@@ -329,7 +329,7 @@
 
   @media (max-width:560px){
     .wrap{padding:0 14px;}
-    .brand{font-size:18px;}
+    .brand-logo{height:28px;}
     .navlinks.open{grid-template-columns:1fr;}
     .userchip{width:100%;}
     .hero{border-radius:18px; padding:28px 18px;}

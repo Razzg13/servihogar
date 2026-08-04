@@ -1,5 +1,5 @@
 -- ============================================================
--- ServiHogar — esquema de base de datos para Supabase (Postgres)
+-- Hogandia — esquema de base de datos para Supabase (Postgres)
 -- Cómo usarlo: Supabase Dashboard → tu proyecto → SQL Editor → New query
 -- → pegar todo este archivo → Run.
 -- ============================================================

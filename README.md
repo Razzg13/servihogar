@@ -1,4 +1,4 @@
-# ServiHogar
+# Hogandia
 
 Plataforma web para conectar clientes con trabajadores independientes de servicios técnicos y domésticos (plomería, electricidad, limpieza, jardinería, pintura, cerrajería) en Ibagué.
 

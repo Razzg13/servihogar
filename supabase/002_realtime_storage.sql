@@ -1,5 +1,5 @@
 -- ============================================================
--- ServiHogar — migración 002: Realtime + Storage (fotos y verificación)
+-- Hogandia — migración 002: Realtime + Storage (fotos y verificación)
 -- Ejecutar en: Supabase Dashboard → tu proyecto → SQL Editor → New query
 -- (requiere que supabase/schema.sql ya se haya corrido antes)
 -- ============================================================

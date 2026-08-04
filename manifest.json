@@ -1,12 +1,12 @@
 {
-  "name": "ServiHogar",
-  "short_name": "ServiHogar",
+  "name": "Hogandia",
+  "short_name": "Hogandia",
   "description": "Plataforma para conectar clientes con trabajadores independientes de servicios técnicos y domésticos en Ibagué.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#F3F4F3",
   "theme_color": "#1C2B39",
   "icons": [
-    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "img/icon.png", "sizes": "240x240", "type": "image/png" }
   ]
 }
