@@ -161,6 +161,12 @@
           </div>
           <div class="field"><label for="reg-tarifa">Tarifa desde (COP)</label><input type="number" id="reg-tarifa" min="0" placeholder="30000"></div>
         </div>
+        <div class="field">
+          <label style="display:flex; align-items:flex-start; gap:8px; font-weight:400; font-size:12.5px; color:var(--ink-soft);">
+            <input type="checkbox" id="reg-acepta-privacidad" required style="margin-top:3px;">
+            <span>Leí y acepto la <a href="#/privacidad" target="_blank" rel="noopener">Política de Privacidad</a>.</span>
+          </label>
+        </div>
         <button class="btn btn-primary" style="width:100%;" type="submit">Crear cuenta</button>
       </form>
     </div>
@@ -180,6 +186,54 @@
         </div>
         <button class="btn btn-primary" style="width:100%;" type="submit">Guardar nueva contraseña</button>
       </form>
+    </div>
+  </section>
+
+  <!-- POLÍTICA DE PRIVACIDAD -->
+  <section class="view" id="v-privacidad">
+    <div class="card" style="max-width:720px; margin:0 auto;">
+      <h2 style="font-size:20px; margin-bottom:4px;">Política de Tratamiento de Datos Personales</h2>
+      <p style="font-size:12px; color:var(--ink-soft); margin-bottom:20px;">Última actualización: 6 de agosto de 2026</p>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">1. Responsable del tratamiento</h3>
+      <p style="margin-bottom:16px;">Santiago Guzmán Sánchez, persona natural que opera la plataforma Hogandia, es responsable del tratamiento de los datos personales recolectados a través de este sitio. Para cualquier consulta, solicitud o ejercicio de tus derechos, podés escribir a <a href="mailto:santiagoguzman1310@gmail.com">santiagoguzman1310@gmail.com</a>.</p>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">2. Qué datos recolectamos</h3>
+      <p style="margin-bottom:8px;">Según el tipo de cuenta y el uso que le des a la plataforma, podemos recolectar:</p>
+      <ul style="margin:0 0 16px; padding-left:20px;">
+        <li>Datos de identificación y contacto: nombre completo y correo electrónico.</li>
+        <li>Credenciales de acceso: tu contraseña la gestiona Supabase Auth de forma cifrada; nunca la almacenamos en texto plano ni tenemos acceso a ella.</li>
+        <li>Si sos trabajador: categoría de servicio, tarifa, zona, ubicación aproximada (solo si activás voluntariamente "usar mi ubicación"), foto de perfil, galería de trabajos, y el documento de identidad que subís para solicitar verificación.</li>
+        <li>Contenido que generás al usar la app: mensajes de chat, calificaciones y reseñas, comprobantes de pago que subís al declarar un pago, reportes de problemas.</li>
+        <li>Datos técnicos básicos de la sesión (necesarios para mantenerte conectado y para las notificaciones push, si las activás).</li>
+      </ul>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">3. Para qué usamos tus datos</h3>
+      <ul style="margin:0 0 16px; padding-left:20px;">
+        <li>Prestar el servicio de intermediación entre clientes y trabajadores (búsqueda, agendamiento, chat, calificaciones).</li>
+        <li>Verificar la identidad de los trabajadores que solicitan el distintivo de verificado.</li>
+        <li>Registrar y confirmar los pagos que declarás por una cita, y mostrarte el historial correspondiente.</li>
+        <li>Enviarte notificaciones sobre tus citas, mensajes y pagos (dentro de la app, por correo o por notificación push, según lo que hayas activado).</li>
+        <li>Prevenir fraude y resolver reportes o disputas entre usuarios.</li>
+      </ul>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">4. Cómo protegemos tus datos</h3>
+      <p style="margin-bottom:16px;">Los datos se guardan en una base de datos de Supabase (Postgres) con políticas de seguridad a nivel de fila (Row Level Security): cada usuario solo puede leer o editar la información que le corresponde. Los documentos de verificación y los comprobantes de pago se guardan en almacenamiento privado, accesible únicamente por vos, la otra parte involucrada en la cita correspondiente, y el administrador de la plataforma.</p>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">5. Con quién compartimos tus datos</h3>
+      <p style="margin-bottom:16px;">No vendemos ni compartimos tus datos con terceros para fines comerciales o publicitarios. Supabase actúa como encargado del tratamiento, es decir, aloja la infraestructura técnica bajo nuestras instrucciones. La información de tu perfil público como trabajador (nombre, categoría, zona, calificación, servicios) es visible para cualquier visitante del sitio, ya que ese es el propósito del directorio de búsqueda.</p>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">6. Tus derechos</h3>
+      <p style="margin-bottom:16px;">De acuerdo con la Ley 1581 de 2012 (régimen de protección de datos personales de Colombia), tenés derecho a conocer, actualizar, rectificar y suprimir tus datos personales, así como a revocar la autorización para su tratamiento en cualquier momento. Podés ejercer estos derechos escribiendo a <a href="mailto:santiagoguzman1310@gmail.com">santiagoguzman1310@gmail.com</a>, o eliminando directamente la información editable desde tu perfil dentro de la app.</p>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">7. Conservación de los datos</h3>
+      <p style="margin-bottom:16px;">Conservamos tus datos mientras tu cuenta esté activa. Si pedís la eliminación de tu cuenta, eliminamos o anonimizamos tus datos personales, salvo que debamos conservar cierta información por una obligación legal o para resolver un reporte o disputa en curso.</p>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">8. Menores de edad</h3>
+      <p style="margin-bottom:16px;">Hogandia no está dirigida a menores de 18 años. Si sos menor de edad, no debés crear una cuenta ni enviarnos datos personales.</p>
+
+      <h3 style="font-size:15px; margin-bottom:8px;">9. Cambios a esta política</h3>
+      <p style="margin-bottom:4px;">Podemos actualizar esta política en cualquier momento; si lo hacemos, vamos a actualizar la fecha al inicio de este documento. Te recomendamos revisarla de vez en cuando.</p>
     </div>
   </section>
 
@@ -292,7 +346,7 @@
 
 </main>
 
-<footer>Hogandia — Servicios de confianza, cerca de ti.</footer>
+<footer>Hogandia — Servicios de confianza, cerca de ti. · <a href="#/privacidad">Política de privacidad</a></footer>
 
 <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 

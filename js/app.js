@@ -356,7 +356,7 @@ function avatarHTML(nombre, fotoUrl){
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
-const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin','resetpass'];
+const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin','resetpass','privacidad'];
 let suprimirPush = false; // true mientras restauramos una ruta (popstate / carga inicial): no volver a empujar historial
 
 function routeHashFor(view){
