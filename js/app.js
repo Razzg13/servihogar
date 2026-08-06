@@ -1652,7 +1652,9 @@ async function renderTrabajo(){
 
   const verifBadge = u.verificado ? `<span class="verif-badge">✓ Verificado</span>`
     : u.verificacionPendiente ? `<span class="status-pill status-pendiente">Verificación pendiente</span>`
-    : `<button id="wp-verif-btn" class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Solicitar verificación</button>`;
+    : u.verificacion_rechazada
+      ? `<span class="status-pill status-rechazada">Rechazada</span> <button id="wp-verif-btn" class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Volver a solicitar</button>`
+      : `<button id="wp-verif-btn" class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Solicitar verificación</button>`;
 
   state.wpDisponibilidad = JSON.parse(JSON.stringify(u.disponibilidad || disponibilidadPorDefecto()));
   // currentUser() no trae las reseñas (cargarPerfilActual no las selecciona); se piden aparte para el panel.
@@ -1703,8 +1705,15 @@ async function renderTrabajo(){
         <h3 style="font-size:15px;">Editar perfil profesional</h3>
         ${verifBadge}
       </div>
+      ${u.verificacion_rechazada && u.verificacion_motivo_rechazo ? `<div class="msg err" style="margin-bottom:12px;">Tu verificación fue rechazada: ${esc(u.verificacion_motivo_rechazo)}. Corregí el documento y volvé a intentarlo.</div>` : ''}
       <div id="verif-panel" class="hidden" style="margin-bottom:16px; padding:14px; border:1.5px dashed var(--line); border-radius:12px;">
-        <label style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Documento (cédula o certificado)</label>
+        <label for="wp-doc-tipo" style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Tipo de documento</label>
+        <select id="wp-doc-tipo" style="margin-bottom:12px;">
+          <option value="cedula">Cédula de ciudadanía</option>
+          <option value="rut">RUT / registro de cámara de comercio</option>
+          <option value="certificado">Certificado de estudios u oficio</option>
+        </select>
+        <label for="wp-doc-input" style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Documento (foto o PDF)</label>
         <input type="file" id="wp-doc-input" accept="image/*,application/pdf">
         <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="solicitarVerificacion()">Enviar solicitud</button>
         <div id="wp-verif-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
@@ -1827,6 +1836,7 @@ async function subirFotoPerfil(){
 async function solicitarVerificacion(){
   const u = currentUser();
   const input = document.getElementById('wp-doc-input');
+  const tipoSel = document.getElementById('wp-doc-tipo');
   const msgEl = document.getElementById('wp-verif-msg');
   const file = input && input.files[0];
   if(!file){
@@ -1840,7 +1850,16 @@ async function solicitarVerificacion(){
     if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir el documento: ${esc(upErr.message)}</div>`;
     return;
   }
-  await sb.from('profiles').update({ verificacion_pendiente: true, verificacion_doc_path: path }).eq('id', u.id);
+  const tipoDoc = tipoSel ? tipoSel.value : null;
+  const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'solicitada', tipo_doc: tipoDoc }];
+  await sb.from('profiles').update({
+    verificacion_pendiente: true,
+    verificacion_doc_path: path,
+    verificacion_tipo_doc: tipoDoc,
+    verificacion_rechazada: false,
+    verificacion_motivo_rechazo: null,
+    verificacion_historial: historial,
+  }).eq('id', u.id);
   invalidarPerfil(u.id);
   renderTrabajo();
 }
@@ -2003,8 +2022,14 @@ async function renderAdmin(){
       if(x.tipo==='trabajador'){
         const verDoc = x.verificacionPendiente && x.verificacion_doc_path
           ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verDocumentoVerificacion('${esc(x.verificacion_doc_path)}')">Ver documento</button>` : '';
-        verifCell = x.verificado ? `<span class="verif-badge">✓ Verificado</span>`
-          : x.verificacionPendiente ? `${verDoc}<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="verificarTrabajador('${x.id}')">Verificar</button>`
+        const historial = x.verificacion_historial || [];
+        const historialTitle = historial.length
+          ? historial.map(h=>`${h.fecha ? new Date(h.fecha).toLocaleDateString() : '?'}: ${h.accion}${h.motivo ? ' — '+h.motivo : ''}`).join(' | ')
+          : '';
+        const historialIcono = historialTitle ? ` <span title="${esc(historialTitle)}" style="cursor:help;">🕘</span>` : '';
+        verifCell = x.verificado ? `<span class="verif-badge">✓ Verificado</span>${historialIcono}`
+          : x.verificacionPendiente ? `${verDoc}<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verificarTrabajador('${x.id}')">Verificar</button><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="rechazarVerificacion('${x.id}')">Rechazar</button>${historialIcono}`
+          : x.verificacion_rechazada ? `<span class="status-pill status-rechazada" title="${esc(x.verificacion_motivo_rechazo||'')}">Rechazada</span>${historialIcono}`
           : `<span class="status-pill status-bloqueado">Sin solicitar</span>`;
       }
       return `<tr><td>${esc(x.nombre)}</td><td>${x.tipo}</td><td>${esc(x.correo)}</td>
@@ -2049,10 +2074,36 @@ async function verDocumentoVerificacion(path){
 async function verificarTrabajador(id){
   const u = await obtenerPerfil(id);
   if(!u) return;
-  await sb.from('profiles').update({ verificado: true, verificacion_pendiente: false }).eq('id', id);
+  const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'aprobada' }];
+  await sb.from('profiles').update({
+    verificado: true,
+    verificacion_pendiente: false,
+    verificacion_rechazada: false,
+    verificacion_motivo_rechazo: null,
+    verificacion_historial: historial,
+  }).eq('id', id);
   invalidarPerfil(id);
   addNotificacion(u.id, 'Tu perfil fue verificado por el administrador. Ya se muestra el distintivo ✓ Verificado.');
   mostrarToast(`${u.nombre.split(' ')[0]} fue verificado.`, 'ok');
+  renderAdmin();
+}
+async function rechazarVerificacion(id){
+  const u = await obtenerPerfil(id);
+  if(!u) return;
+  const motivo = prompt('¿Por qué se rechaza la verificación? El trabajador va a ver este motivo.');
+  if(motivo === null) return; // canceló el prompt
+  if(!motivo.trim()){ mostrarToast('Escribí un motivo para rechazar.', 'err'); return; }
+  const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'rechazada', motivo: motivo.trim() }];
+  await sb.from('profiles').update({
+    verificado: false,
+    verificacion_pendiente: false,
+    verificacion_rechazada: true,
+    verificacion_motivo_rechazo: motivo.trim(),
+    verificacion_historial: historial,
+  }).eq('id', id);
+  invalidarPerfil(id);
+  addNotificacion(u.id, `Tu verificación fue rechazada: ${motivo.trim()}. Podés corregir el documento y volver a solicitarla desde tu perfil.`);
+  mostrarToast(`Verificación de ${u.nombre.split(' ')[0]} rechazada.`, 'ok');
   renderAdmin();
 }
 async function resolverReporte(id){
