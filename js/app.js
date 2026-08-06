@@ -1652,21 +1652,40 @@ async function renderTrabajo(){
 
   const verifBadge = u.verificado ? `<span class="verif-badge">✓ Verificado</span>`
     : u.verificacionPendiente ? `<span class="status-pill status-pendiente">Verificación pendiente</span>`
-    : `<button class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Solicitar verificación</button>`;
+    : `<button id="wp-verif-btn" class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Solicitar verificación</button>`;
 
   state.wpDisponibilidad = JSON.parse(JSON.stringify(u.disponibilidad || disponibilidadPorDefecto()));
   // currentUser() no trae las reseñas (cargarPerfilActual no las selecciona); se piden aparte para el panel.
   const propioConResenas = await obtenerPerfil(u.id, true);
   const misResenas = (propioConResenas && propioConResenas.resenas) || [];
 
+  const completitud = calcularCompletitudPerfil(u);
+  const completitudHTML = completitud.porcentaje >= 100 ? `
+    <div class="card" style="max-width:520px; margin-bottom:16px;">
+      <h3 style="font-size:15px;">✓ Perfil completo</h3>
+      <p style="font-size:12.5px; color:var(--ink-soft); margin-top:4px;">Tu perfil tiene todo lo necesario para generar confianza.</p>
+    </div>` : `
+    <div class="card" style="max-width:520px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 style="font-size:15px;">Completa tu perfil</h3>
+        <b class="mono">${completitud.porcentaje}%</b>
+      </div>
+      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${completitud.porcentaje}%"></div></div>
+      <p style="font-size:12px; color:var(--ink-soft); margin:10px 0 4px;">Un perfil completo genera más confianza y aparece mejor rankeado. Te falta:</p>
+      <ul style="margin:0; padding-left:18px; font-size:12.5px;">
+        ${completitud.faltantes.map(f=>`<li style="margin-bottom:4px;"><button type="button" class="link-btn" onclick="irACampoPerfil('${f.anchor}')">${esc(f.label)}</button></li>`).join('')}
+      </ul>
+    </div>`;
+
   document.getElementById('work-perfil').innerHTML = `
+    ${completitudHTML}
     <div class="card" style="max-width:520px; margin-bottom:16px;">
       <h3 style="font-size:15px; margin-bottom:14px;">Foto de perfil</h3>
       <div style="display:flex; align-items:center; gap:14px;">
         ${avatarHTML(u.nombre, u.foto_url)}
         <div>
           <input type="file" id="wp-foto-input" accept="image/*" class="hidden" onchange="subirFotoPerfil()">
-          <button type="button" class="btn btn-outline" onclick="document.getElementById('wp-foto-input').click()">Cambiar foto</button>
+          <button type="button" id="wp-foto-btn" class="btn btn-outline" onclick="document.getElementById('wp-foto-input').click()">Cambiar foto</button>
           <div id="wp-foto-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
         </div>
       </div>
@@ -1676,7 +1695,7 @@ async function renderTrabajo(){
       <p style="font-size:12px; color:var(--ink-soft); margin-bottom:12px;">Subí fotos de trabajos anteriores para que los clientes vean tu trabajo antes de contratarte.</p>
       <div class="galeria-grid">${(u.galeria_fotos||[]).map((url,i)=>`<div class="galeria-item"><img src="${esc(url)}" alt=""><button type="button" class="galeria-del" onclick="eliminarFotoGaleria(${i})" aria-label="Eliminar foto">✕</button></div>`).join('')}</div>
       <input type="file" id="wp-galeria-input" accept="image/*" class="hidden" onchange="subirFotoGaleria()">
-      <button type="button" class="btn btn-outline" style="margin-top:10px;" onclick="document.getElementById('wp-galeria-input').click()">+ Agregar foto</button>
+      <button type="button" id="wp-galeria-btn" class="btn btn-outline" style="margin-top:10px;" onclick="document.getElementById('wp-galeria-input').click()">+ Agregar foto</button>
       <div id="wp-galeria-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
     </div>
     <div class="card" style="max-width:520px;">
@@ -1737,6 +1756,32 @@ async function renderTrabajo(){
                </div>`}
         </div>`).join('') : `<p style="font-size:13px;color:var(--ink-soft);">Todavía no tienes reseñas.</p>`}
     </div>`;
+}
+
+// Pura y testeable: no toca el DOM, solo evalúa el perfil recibido. `anchor`
+// es el id del elemento al que hay que llevar al trabajador para completar
+// ese punto (ver irACampoPerfil).
+function calcularCompletitudPerfil(w){
+  if(!w) return { porcentaje: 0, faltantes: [] };
+  const items = [
+    { ok: !!w.foto_url, label: 'Subí una foto de perfil', anchor: 'wp-foto-btn' },
+    { ok: !!(w.galeria_fotos && w.galeria_fotos.length), label: 'Agregá al menos una foto de trabajos anteriores', anchor: 'wp-galeria-btn' },
+    { ok: !!(w.servicios && w.servicios.length), label: 'Contá qué servicios ofrecés', anchor: 'wp-servicios' },
+    { ok: !!(w.zona && w.zona !== 'Sin definir'), label: 'Indicá la zona donde trabajás', anchor: 'wp-zona' },
+    { ok: Object.values(w.disponibilidad || {}).some(horas => Array.isArray(horas) && horas.length > 0), label: 'Configurá tu disponibilidad semanal', anchor: 'wp-disponibilidad' },
+    { ok: !!(w.verificado || w.verificacionPendiente), label: 'Solicitá la verificación de tu identidad', anchor: 'wp-verif-btn' },
+  ];
+  const completos = items.filter(i => i.ok).length;
+  return {
+    porcentaje: Math.round((completos / items.length) * 100),
+    faltantes: items.filter(i => !i.ok),
+  };
+}
+function irACampoPerfil(anchorId){
+  const el = document.getElementById(anchorId);
+  if(!el) return;
+  el.scrollIntoView({ behavior:'smooth', block:'center' });
+  if(typeof el.focus === 'function') el.focus();
 }
 function disponibilidadGridHTML(){
   return DIAS_SEMANA.map(dia=>`
