@@ -1247,7 +1247,7 @@ async function verComprobantePago(path){
 async function confirmarPagoRecibido(citaId){
   const { data: c, error } = await sb.from('citas').update({ pago: 'pagado' }).eq('id', citaId).select('cliente_id, fecha').single();
   if(error){ mostrarToast('No se pudo confirmar el pago.', 'err'); return; }
-  if(c) addNotificacion(c.cliente_id, `Confirmamos que recibiste el pago del servicio del ${c.fecha}. ¡Gracias!`);
+  if(c) addNotificacion(c.cliente_id, `El trabajador confirmó que recibió tu pago del servicio del ${c.fecha}. ¡Gracias!`);
   mostrarToast('Pago confirmado.', 'ok');
   renderTrabajo();
 }
