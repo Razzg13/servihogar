@@ -1880,7 +1880,7 @@ async function renderEstadisticas(){
   const box = document.getElementById('admin-estadisticas');
   const [trabajadores, { data: todasCitas }] = await Promise.all([
     cargarTrabajadores(),
-    sb.from('citas').select('trabajador_id')
+    sb.from('citas').select('trabajador_id, cliente_id, monto, pago, estado')
   ]);
   const citas = todasCitas || [];
   const trabajadorPorId = new Map(trabajadores.map(w=>[w.id, w]));
@@ -1900,6 +1900,46 @@ async function renderEstadisticas(){
     .sort((a,b)=>b.n-a.n).slice(0,5);
   const maxTop = Math.max(1, ...topTrabajadores.map(t=>t.n));
 
+  // Ingresos por categoría: solo citas ya pagadas (monto real cobrado, no estimado).
+  const ingresosPorCategoria = {};
+  citas.forEach(c=>{
+    if(c.pago !== 'pagado' || !c.monto) return;
+    const w = trabajadorPorId.get(c.trabajador_id);
+    if(!w) return;
+    ingresosPorCategoria[w.categoria] = (ingresosPorCategoria[w.categoria]||0) + c.monto;
+  });
+  const maxIngresos = Math.max(1, ...Object.values(ingresosPorCategoria));
+
+  // Calificación promedio por categoría, ponderada por reseña (no promedio de promedios,
+  // para que un trabajador con una sola reseña de 5★ no pese igual que uno con 40 reseñas).
+  const estrellasPorCategoria = {};
+  trabajadores.forEach(w=>{
+    (w.resenas||[]).forEach(r=>{
+      const acc = estrellasPorCategoria[w.categoria] || { suma:0, n:0 };
+      acc.suma += r.estrellas; acc.n += 1;
+      estrellasPorCategoria[w.categoria] = acc;
+    });
+  });
+
+  // Clientes recurrentes: los que ya completaron más de una cita.
+  const completadasPorCliente = {};
+  citas.forEach(c=>{
+    if(c.estado !== 'completada') return;
+    completadasPorCliente[c.cliente_id] = (completadasPorCliente[c.cliente_id]||0) + 1;
+  });
+  const clientesConCitas = Object.keys(completadasPorCliente).length;
+  const clientesRecurrentes = Object.values(completadasPorCliente).filter(n=>n>1).length;
+
+  // Trabajadores nuevos por mes (últimos 6 meses con altas), como proxy simple de crecimiento.
+  const porMes = {};
+  trabajadores.forEach(w=>{
+    if(!w.created_at) return;
+    const mes = w.created_at.slice(0,7);
+    porMes[mes] = (porMes[mes]||0) + 1;
+  });
+  const mesesOrdenados = Object.keys(porMes).sort().slice(-6);
+  const maxMes = Math.max(1, ...mesesOrdenados.map(m=>porMes[m]));
+
   box.innerHTML = `
     <div class="card" style="margin-bottom:16px;">
       <h3 style="font-size:14px; margin-bottom:14px;">Citas por categoría</h3>
@@ -1910,7 +1950,7 @@ async function renderEstadisticas(){
           <span class="stat-bar-n">${porCategoria[c.n]}</span>
         </div>`).join('') : `<div class="empty-note">Aún no hay citas registradas.</div>`}
     </div>
-    <div class="card">
+    <div class="card" style="margin-bottom:16px;">
       <h3 style="font-size:14px; margin-bottom:14px;">Trabajadores más solicitados</h3>
       ${citas.length ? topTrabajadores.map(t=>`
         <div class="stat-bar-row">
@@ -1918,6 +1958,46 @@ async function renderEstadisticas(){
           <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(t.n/maxTop)*100}%; background:var(--orange);"></div></div>
           <span class="stat-bar-n">${t.n}</span>
         </div>`).join('') : `<div class="empty-note">Aún no hay citas registradas.</div>`}
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="font-size:14px; margin-bottom:14px;">Ingresos por categoría</h3>
+      ${Object.keys(ingresosPorCategoria).length ? CATS.filter(c=>ingresosPorCategoria[c.n]).map(c=>`
+        <div class="stat-bar-row">
+          <span class="stat-bar-label">${c.n}</span>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(ingresosPorCategoria[c.n]/maxIngresos)*100}%; background:var(--green);"></div></div>
+          <span class="stat-bar-n" style="width:auto;">${fmtCOP(ingresosPorCategoria[c.n])}</span>
+        </div>`).join('') : `<div class="empty-note">Todavía no hay citas pagadas.</div>`}
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="font-size:14px; margin-bottom:14px;">Calificación promedio por categoría</h3>
+      ${Object.keys(estrellasPorCategoria).length ? CATS.filter(c=>estrellasPorCategoria[c.n]).map(c=>{
+        const prom = estrellasPorCategoria[c.n].suma / estrellasPorCategoria[c.n].n;
+        return `
+        <div class="stat-bar-row">
+          <span class="stat-bar-label">${c.n}</span>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(prom/5)*100}%; background:var(--orange);"></div></div>
+          <span class="stat-bar-n">★${prom.toFixed(1)}</span>
+        </div>`;
+      }).join('') : `<div class="empty-note">Todavía no hay reseñas.</div>`}
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="font-size:14px; margin-bottom:4px;">Clientes recurrentes</h3>
+      <p style="font-size:12px; color:var(--ink-soft); margin-bottom:14px;">Clientes con más de una cita completada.</p>
+      ${clientesConCitas ? `
+        <div class="stat-bar-row">
+          <span class="stat-bar-label">Recurrentes</span>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(clientesRecurrentes/clientesConCitas)*100}%; background:var(--navy);"></div></div>
+          <span class="stat-bar-n" style="width:auto;">${clientesRecurrentes}/${clientesConCitas}</span>
+        </div>` : `<div class="empty-note">Todavía no hay citas completadas.</div>`}
+    </div>
+    <div class="card">
+      <h3 style="font-size:14px; margin-bottom:14px;">Trabajadores nuevos por mes</h3>
+      ${mesesOrdenados.length ? mesesOrdenados.map(m=>`
+        <div class="stat-bar-row">
+          <span class="stat-bar-label">${m}</span>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(porMes[m]/maxMes)*100}%;"></div></div>
+          <span class="stat-bar-n">${porMes[m]}</span>
+        </div>`).join('') : `<div class="empty-note">Sin datos suficientes.</div>`}
     </div>`;
 }
 
