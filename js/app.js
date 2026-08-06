@@ -70,11 +70,58 @@ function toggleTheme(){
 
 async function addNotificacion(userId, texto){
   await sb.from('notificaciones').insert({ user_id: userId, texto });
-  // Envía también un correo real. No bloquea ni rompe el flujo si falla
-  // (ej. todavía no configuraste RESEND_API_KEY): la notificación en la app
-  // ya quedó guardada de todos modos.
+  // Envía también un correo real y una notificación push del navegador. No
+  // bloquean ni rompen el flujo si fallan (ej. todavía no configuraste
+  // RESEND_API_KEY/VAPID_*, o el usuario no activó las push): la notificación
+  // en la app ya quedó guardada de todos modos.
   sb.functions.invoke('notificar-email', { body: { record: { user_id: userId, texto } } })
     .catch(()=>{});
+  sb.functions.invoke('enviar-push', { body: { record: { user_id: userId, texto } } })
+    .catch(()=>{});
+}
+
+// La applicationServerKey del Push API pide un Uint8Array, no el string base64url tal cual.
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function activarNotificacionesPush(){
+  const u = currentUser(); if(!u) return;
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    mostrarToast('Tu navegador no soporta notificaciones push.', 'err'); return;
+  }
+  if(VAPID_PUBLIC_KEY.startsWith('REEMPLAZAR_')){
+    mostrarToast('Notificaciones push no configuradas todavía.', 'err'); return;
+  }
+  try{
+    const permiso = await Notification.requestPermission();
+    if(permiso !== 'granted'){
+      mostrarToast('No diste permiso para notificaciones.', 'err'); return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = sub.toJSON();
+    await sb.from('push_subscriptions').upsert({
+      user_id: u.id,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    }, { onConflict: 'endpoint' });
+    mostrarToast('Notificaciones push activadas.', 'ok');
+    const btn = document.getElementById('push-btn');
+    if(btn) btn.remove();
+  }catch(e){
+    mostrarToast('No se pudo activar notificaciones push.', 'err');
+  }
 }
 
 // Aviso flotante para confirmar acciones importantes (además del panel de campana).
@@ -392,8 +439,13 @@ function renderNav(active){
       <div class="notif-panel hidden" id="notif-panel"></div>
     </div>` : '';
 
+  const pushSoportado = 'serviceWorker' in navigator && 'PushManager' in window;
+  const pushBtn = (u && pushSoportado && typeof Notification !== 'undefined' && Notification.permission !== 'granted')
+    ? `<button class="icon-btn" id="push-btn" aria-label="Activar notificaciones push" title="Activar notificaciones push" onclick="activarNotificacionesPush()">🔕</button>`
+    : '';
+
   if(u){
-    auth.innerHTML = `${notifBtn}
+    auth.innerHTML = `${pushBtn}${notifBtn}
                        <span class="userchip">Hola, ${esc(u.nombre.split(' ')[0])}</span>
                        <button class="btn btn-ghost" onclick="logout()">Cerrar sesión</button>
                        <button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${loadTheme()==='dark'?'☀️':'🌙'}</button>`;
