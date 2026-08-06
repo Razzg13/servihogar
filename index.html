@@ -367,21 +367,29 @@
     <div id="work-perfil" class="hidden"></div>
   </section>
 
+  <!-- PQR (peticiones, quejas y reclamos) -->
+  <section class="view" id="v-pqr">
+    <h2 style="margin-bottom:18px;">Peticiones, quejas y reclamos</h2>
+    <div id="pqr-content"></div>
+  </section>
+
   <!-- PANEL ADMIN -->
   <section class="view" id="v-admin">
     <div class="tabbar">
       <button id="atab-usuarios" class="on" onclick="switchAdminTab('usuarios')">Usuarios</button>
       <button id="atab-reportes" onclick="switchAdminTab('reportes')">Reportes</button>
+      <button id="atab-pqr" onclick="switchAdminTab('pqr')">PQR</button>
       <button id="atab-estadisticas" onclick="switchAdminTab('estadisticas')">Estadísticas</button>
     </div>
     <div id="admin-usuarios"></div>
     <div id="admin-reportes" class="hidden"></div>
+    <div id="admin-pqr" class="hidden"></div>
     <div id="admin-estadisticas" class="hidden"></div>
   </section>
 
 </main>
 
-<footer>Hogandia — Servicios de confianza, cerca de ti. · <a href="#/terminos">Términos y condiciones</a> · <a href="#/privacidad">Política de privacidad</a></footer>
+<footer>Hogandia — Servicios de confianza, cerca de ti. · <a href="#/pqr">PQR</a> · <a href="#/terminos">Términos y condiciones</a> · <a href="#/privacidad">Política de privacidad</a></footer>
 
 <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 

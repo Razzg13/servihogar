@@ -356,7 +356,7 @@ function avatarHTML(nombre, fotoUrl){
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
-const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin','resetpass','privacidad','terminos'];
+const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin','resetpass','privacidad','terminos','pqr'];
 let suprimirPush = false; // true mientras restauramos una ruta (popstate / carga inicial): no volver a empujar historial
 
 function routeHashFor(view){
@@ -397,6 +397,7 @@ function nav(view){
   if(view==='favoritos') renderFavoritos();
   if(view==='trabajo') renderTrabajo();
   if(view==='admin') renderAdmin();
+  if(view==='pqr') renderPQR();
   if(!suprimirPush){
     const hash = routeHashFor(view);
     if(location.hash !== hash) history.pushState(null, '', hash);
@@ -555,6 +556,62 @@ async function renderFavoritos(){
   const favs = await obtenerPerfiles(u.favoritos||[]);
   box.innerHTML = favs.length ? `<div class="worker-grid">${favs.map(workerCardHTML).join('')}</div>`
     : `<div class="empty-note">Todavía no has guardado trabajadores. Toca el corazón ♡ en cualquier tarjeta para guardarlo aquí.</div>`;
+}
+
+/* ---------------- PQR (peticiones, quejas y reclamos) ---------------- */
+async function renderPQR(){
+  const u = currentUser();
+  const box = document.getElementById('pqr-content');
+  if(!u){ box.innerHTML = `<div class="empty-note">Inicia sesión para enviar una petición, queja o reclamo.</div>`; return; }
+  const { data } = await sb.from('pqr').select('*').eq('user_id', u.id).order('created_at', {ascending:false});
+  const propias = data || [];
+  box.innerHTML = `
+    <div class="card" style="max-width:520px; margin-bottom:24px;">
+      <h3 style="font-size:15px; margin-bottom:14px;">Enviar una nueva solicitud</h3>
+      <div class="field"><label for="pqr-tipo">Tipo</label>
+        <select id="pqr-tipo">
+          <option value="peticion">Petición (pedir información o ejercer un derecho, ej. tus datos)</option>
+          <option value="queja">Queja (algo no funcionó como esperabas)</option>
+          <option value="reclamo">Reclamo (pedís una solución concreta)</option>
+        </select>
+      </div>
+      <div class="field"><label for="pqr-asunto">Asunto</label><input id="pqr-asunto" maxlength="120"></div>
+      <div class="field"><label for="pqr-mensaje">Mensaje</label>
+        <textarea id="pqr-mensaje" rows="4" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="enviarPQR()">Enviar</button>
+      <div id="pqr-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
+    </div>
+    <h3 style="font-size:15px; margin-bottom:12px;">Tus solicitudes anteriores</h3>
+    ${propias.length ? propias.map(p=>`
+      <div class="card" style="max-width:520px; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <b style="font-size:13px;">${esc(p.asunto)}</b>
+          <span class="status-pill status-${p.estado==='respondido'?'activo':'pendiente'}">${p.estado}</span>
+        </div>
+        <p style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">${p.tipo} · ${new Date(p.created_at).toLocaleDateString()}</p>
+        <p style="font-size:13px; margin-bottom:8px;">${esc(p.mensaje)}</p>
+        ${p.respuesta ? `<div class="resena-respuesta"><b>Respuesta:</b> ${esc(p.respuesta)}</div>` : ''}
+      </div>`).join('') : `<div class="empty-note">Todavía no enviaste ninguna.</div>`}
+  `;
+}
+async function enviarPQR(){
+  const u = currentUser();
+  const tipo = document.getElementById('pqr-tipo').value;
+  const asunto = document.getElementById('pqr-asunto').value.trim();
+  const mensaje = document.getElementById('pqr-mensaje').value.trim();
+  const msgEl = document.getElementById('pqr-msg');
+  if(!asunto || !mensaje){
+    msgEl.innerHTML = `<div class="msg err">Completá el asunto y el mensaje.</div>`;
+    return;
+  }
+  const { error } = await sb.from('pqr').insert({ user_id: u.id, tipo, asunto, mensaje });
+  if(error){
+    msgEl.innerHTML = `<div class="msg err">No se pudo enviar: ${esc(error.message)}</div>`;
+    return;
+  }
+  mostrarToast('Enviado. Te avisamos por notificación cuando te respondamos.', 'ok');
+  renderPQR();
 }
 
 function irABuscarConCategoria(cat){ state.catFiltro = cat; nav('buscar'); }
@@ -1989,10 +2046,13 @@ async function guardarPerfilTrabajador(){
 function switchAdminTab(tab){
   document.getElementById('atab-usuarios').classList.toggle('on', tab==='usuarios');
   document.getElementById('atab-reportes').classList.toggle('on', tab==='reportes');
+  document.getElementById('atab-pqr').classList.toggle('on', tab==='pqr');
   document.getElementById('atab-estadisticas').classList.toggle('on', tab==='estadisticas');
   document.getElementById('admin-usuarios').classList.toggle('hidden', tab!=='usuarios');
   document.getElementById('admin-reportes').classList.toggle('hidden', tab!=='reportes');
+  document.getElementById('admin-pqr').classList.toggle('hidden', tab!=='pqr');
   document.getElementById('admin-estadisticas').classList.toggle('hidden', tab!=='estadisticas');
+  if(tab==='pqr') renderPQRAdmin();
   if(tab==='estadisticas') renderEstadisticas();
 }
 async function renderAdmin(){
@@ -2108,6 +2168,37 @@ async function rechazarVerificacion(id){
 async function resolverReporte(id){
   await sb.from('reportes').update({ estado: 'resuelto' }).eq('id', id);
   renderAdmin();
+}
+
+async function renderPQRAdmin(){
+  const box = document.getElementById('admin-pqr');
+  const u = currentUser();
+  if(!u || u.tipo!=='admin'){ box.innerHTML = `<div class="empty-note">Solo el administrador puede ver este panel.</div>`; return; }
+  const { data, error } = await sb.from('pqr').select('*').order('created_at', {ascending:false});
+  const solicitudes = error ? [] : data;
+  const usuarios = await obtenerPerfiles(solicitudes.map(p=>p.user_id));
+  const usuarioPorId = new Map(usuarios.map(x=>[x && x.id, x]));
+  box.innerHTML = solicitudes.length ? `
+    <table><thead><tr><th>Usuario</th><th>Tipo</th><th>Asunto</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+    ${solicitudes.map(p=>{
+      const persona = usuarioPorId.get(p.user_id);
+      return `<tr><td>${persona?esc(persona.nombre):'—'}</td><td>${p.tipo}</td><td>${esc(p.asunto)}</td>
+      <td><span class="status-pill status-${p.estado==='respondido'?'activo':'pendiente'}">${p.estado}</span></td>
+      <td>${p.estado!=='respondido' ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="responderPQR('${p.id}')">Responder</button>` : '—'}</td></tr>`;
+    }).join('')}
+    </tbody></table>` : `<div class="empty-note">No hay peticiones, quejas ni reclamos.</div>`;
+}
+async function responderPQR(id){
+  const respuesta = prompt('Escribí la respuesta para el usuario:');
+  if(respuesta === null) return; // canceló el prompt
+  if(!respuesta.trim()){ mostrarToast('Escribí una respuesta.', 'err'); return; }
+  const { data, error } = await sb.from('pqr')
+    .update({ estado: 'respondido', respuesta: respuesta.trim(), respuesta_fecha: new Date().toISOString() })
+    .eq('id', id).select('user_id, asunto').single();
+  if(error){ mostrarToast('No se pudo enviar la respuesta.', 'err'); return; }
+  if(data) addNotificacion(data.user_id, `Respondimos tu solicitud "${data.asunto}". Revisala en PQR.`);
+  mostrarToast('Respuesta enviada.', 'ok');
+  renderPQRAdmin();
 }
 
 async function renderEstadisticas(){
