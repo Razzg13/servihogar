@@ -11,7 +11,7 @@ Plataforma web para conectar clientes con trabajadores independientes de servici
 - Favoritos: los clientes pueden guardar trabajadores
 - Agendamiento de citas (calendario y horarios)
 - Chat simple por cita entre cliente y trabajador
-- Pago simulado por cita (sin dinero real)
+- Pago por transferencia con comprobante (el trabajador lo confirma al recibirlo)
 - Comprobante de la cita descargable/imprimible
 - Reportar un problema desde una cita
 - Notificaciones dentro de la app (campana con contador)
@@ -62,8 +62,10 @@ Security): usuarios, citas, reseñas, mensajes de chat, reportes y
 notificaciones se guardan en una base de datos real y compartida, con acceso
 controlado por políticas de seguridad (cada quien solo puede leer/editar lo
 que le corresponde). Las contraseñas las maneja Supabase Auth, nunca se
-guardan en texto plano. El pago y la verificación de identidad siguen siendo
-simulados (no hay pasarela de pago real ni validación de documentos).
+guardan en texto plano. El pago es real pero manual (transferencia por fuera
+de la app + comprobante + confirmación del trabajador, sin pasarela de
+pago); la verificación de identidad también es manual (el admin revisa el
+documento subido, sin validación automática de terceros).
 
 ## Despliegue
 
