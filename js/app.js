@@ -53,10 +53,8 @@ function disponibilidadPorDefecto(){
   DIAS_SEMANA.forEach(k=>d[k]=[...HORAS_DISPONIBLES]);
   return d;
 }
-function diaSemanaDeFecha(dateObj){
-  const map = ['D','L','M','X','J','V','S']; // Date.getDay(): 0=domingo
-  return map[dateObj.getDay()];
-}
+// diaSemanaDeFecha, avg, calcularMonto y horasDisponiblesDia viven en js/logica.js
+// (funciones puras, testeadas con node --test) y quedan disponibles acá como globales.
 
 const THEME_KEY = 'servihogar_theme';
 function loadTheme(){ return localStorage.getItem(THEME_KEY) || 'light'; }
@@ -288,7 +286,6 @@ async function obtenerPerfiles(ids){
   const unicos = [...new Set(ids.filter(Boolean))];
   return Promise.all(unicos.map(id=>obtenerPerfil(id)));
 }
-function avg(resenas){ if(!resenas || !resenas.length) return null; return (resenas.reduce((a,r)=>a+r.estrellas,0)/resenas.length).toFixed(1); }
 function fmtCOP(n){ return '$' + Number(n||0).toLocaleString('es-CO'); }
 // Escapa texto de usuario antes de insertarlo en innerHTML (evita XSS almacenado vía nombre, zona, comentarios, mensajes, etc.)
 function esc(s){
@@ -947,7 +944,7 @@ async function renderSlots(){
       ? `<div class="msg" style="background:#FCEFE3;color:var(--orange-deep);margin-bottom:12px;">⚡ Estás agendando para hoy — se aplica un recargo por urgencia de ${fmtCOP(w.tarifa_urgente)}.</div>`
       : '';
   }
-  const disponibles = (w.disponibilidad && w.disponibilidad[dia]) || [];
+  const disponibles = horasDisponiblesDia(w.disponibilidad, dia);
   if(!disponibles.length){
     grid.innerHTML = `<div class="empty-note" style="padding:16px 0;">${esc(w.nombre.split(' ')[0])} no atiende ese día. Elige otro día en el calendario.</div>`;
     return;
@@ -974,7 +971,7 @@ async function confirmarCita(){
   const dia = diaSemanaDeFecha(new Date(target.getFullYear(), target.getMonth(), state.diaSel));
   const w = await obtenerPerfil(state.workerActual);
   if(!w){ msg.innerHTML = `<div class="msg err">No encontramos ese trabajador.</div>`; return; }
-  const disponibles = (w.disponibilidad && w.disponibilidad[dia]) || [];
+  const disponibles = horasDisponiblesDia(w.disponibilidad, dia);
   if(!disponibles.includes(state.horaSel)){
     msg.innerHTML = `<div class="msg err">Ese horario ya no está disponible para este trabajador. Elige otro.</div>`;
     return;
@@ -1124,10 +1121,7 @@ async function marcarCompletada(id){
 async function simularPago(id){
   const { data: citaPrevia } = await sb.from('citas').select('trabajador_id, es_urgente').eq('id', id).single();
   const w = citaPrevia ? await obtenerPerfil(citaPrevia.trabajador_id) : null;
-  // No hay un monto por servicio guardado en ningún lado; se usa la tarifa
-  // actual del trabajador (+ recargo si fue urgente) como aproximación para
-  // el panel de ingresos.
-  const monto = w ? w.tarifa + (citaPrevia.es_urgente ? (w.tarifa_urgente||0) : 0) : null;
+  const monto = calcularMonto(w, citaPrevia && citaPrevia.es_urgente);
   const { data: c } = await sb.from('citas').update({ pago: 'pagado', monto }).eq('id', id).select().single();
   if(w) addNotificacion(w.id, `Pago simulado recibido por el servicio del ${c.fecha}.`);
   mostrarToast('Pago simulado registrado.', 'ok');
