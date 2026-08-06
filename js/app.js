@@ -1180,6 +1180,8 @@ async function marcarCompletada(id){
 async function abrirDeclararPago(citaId){
   state.citaPagar = citaId;
   await renderDeclararPagoPanel();
+  const panel = document.getElementById('pagar-panel');
+  if(panel) panel.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 function cerrarDeclararPago(){
   state.citaPagar = null;
