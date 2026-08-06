@@ -1061,9 +1061,11 @@ async function renderMisCitas(){
       if(c.estado==='pendiente' || c.estado==='aceptada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="reagendarCita('${c.id}')">Reagendar</button>`;
       if(c.estado==='completada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="irAAgendar('${c.trabajadorId}')">Agendar de nuevo</button>`;
       if(c.estado==='aceptada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="descargarIcs('${c.id}')">📅 Agregar a calendario</button>`;
-      const pagoPill = c.pago==='pagado' ? `<span class="status-pill status-activo">pagado</span>` :
-        (c.estado==='aceptada'||c.estado==='completada') ? `<button class="btn btn-outline" style="font-size:11px;padding:5px 9px;" onclick="simularPago('${c.id}')">Simular pago</button>` :
-        `<span class="status-pill status-pendiente">pendiente</span>`;
+      let pagoPill;
+      if(c.pago==='pagado') pagoPill = `<span class="status-pill status-activo">pagado</span>`;
+      else if(c.pago==='declarado') pagoPill = `<span class="status-pill status-pendiente">esperando confirmación</span>`;
+      else if(c.estado==='aceptada' || c.estado==='completada') pagoPill = `<button class="btn btn-outline" style="font-size:11px;padding:5px 9px;" onclick="abrirDeclararPago('${c.id}')">Declarar pago</button>`;
+      else pagoPill = `<span class="status-pill status-pendiente">pendiente</span>`;
       return `<tr>
         <td>${w?esc(w.nombre):'—'}${c.recurrente?' <span title="Servicio recurrente">🔁</span>':''}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
         <td><span class="status-pill status-${c.estado}">${c.estado}</span>${c.estado==='aceptada' && c.en_camino ? `<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span> <button type="button" class="btn btn-outline" style="font-size:10.5px;padding:3px 7px;margin-top:4px;" onclick="verUbicacionEnCamino('${c.id}')">Ver en mapa</button>` : ''}</td>
@@ -1078,6 +1080,7 @@ async function renderMisCitas(){
   </tbody></table>
   <div id="encamino-mapa-panel" class="hidden" style="margin-top:20px;"></div>
   <div id="calificar-panel" style="margin-top:20px;"></div>
+  <div id="pagar-panel" style="margin-top:20px;"></div>
   <div id="chat-panel" style="margin-top:20px;"></div>
   <div id="reportar-panel" style="margin-top:20px;" role="status" aria-live="polite"></div>`;
 }
@@ -1121,17 +1124,88 @@ async function marcarCompletada(id){
   await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
   renderMisCitas();
 }
-async function simularPago(id){
-  const { data: citaPrevia } = await sb.from('citas').select('trabajador_id, es_urgente').eq('id', id).single();
-  const w = citaPrevia ? await obtenerPerfil(citaPrevia.trabajador_id) : null;
-  // No hay un monto por servicio guardado en ningún lado; se usa la tarifa
-  // actual del trabajador (+ recargo si fue urgente) como aproximación para
-  // el panel de ingresos.
-  const monto = w ? w.tarifa + (citaPrevia.es_urgente ? (w.tarifa_urgente||0) : 0) : null;
-  const { data: c } = await sb.from('citas').update({ pago: 'pagado', monto }).eq('id', id).select().single();
-  if(w) addNotificacion(w.id, `Pago simulado recibido por el servicio del ${c.fecha}.`);
-  mostrarToast('Pago simulado registrado.', 'ok');
-  (document.getElementById('v-miscitas').classList.contains('active') ? renderMisCitas : renderTrabajo)();
+// Pago manual por transferencia: el cliente declara que pagó por fuera de la
+// app (Nequi, cuenta bancaria, etc.) y sube un comprobante; el trabajador
+// confirma o rechaza. El trigger controlar_transicion_pago (migración 016)
+// obliga a que cada paso lo dé quien corresponde.
+async function abrirDeclararPago(citaId){
+  state.citaPagar = citaId;
+  await renderDeclararPagoPanel();
+}
+function cerrarDeclararPago(){
+  state.citaPagar = null;
+  const panel = document.getElementById('pagar-panel');
+  if(panel) panel.innerHTML = '';
+}
+async function renderDeclararPagoPanel(){
+  const panel = document.getElementById('pagar-panel');
+  if(!panel || !state.citaPagar) return;
+  const cita = (state.citasCacheCliente||[]).find(c=>c.id===state.citaPagar);
+  const w = cita ? await obtenerPerfil(cita.trabajadorId) : null;
+  panel.innerHTML = `
+    <div class="card" style="max-width:440px;">
+      <h3 style="font-size:15px; margin-bottom:10px;">Datos para pagarle a ${w?esc(w.nombre.split(' ')[0]):'tu trabajador'}</h3>
+      <p style="font-size:13px; white-space:pre-wrap; background:var(--paper); padding:10px; border-radius:8px; margin-bottom:14px;">${w && w.datos_pago_texto ? esc(w.datos_pago_texto) : 'Este trabajador todavía no cargó sus datos de pago. Consultale directamente cómo prefiere que le transfieras.'}</p>
+      <label for="comprobante-input" style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Comprobante de la transferencia</label>
+      <input type="file" id="comprobante-input" accept="image/*,application/pdf">
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <button type="button" class="btn btn-primary" onclick="declararPago()">Ya transferí, enviar comprobante</button>
+        <button type="button" class="btn btn-outline" onclick="cerrarDeclararPago()">Cancelar</button>
+      </div>
+      <div id="declarar-pago-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
+    </div>`;
+}
+async function declararPago(){
+  const citaId = state.citaPagar;
+  if(!citaId) return;
+  const input = document.getElementById('comprobante-input');
+  const msgEl = document.getElementById('declarar-pago-msg');
+  const file = input && input.files[0];
+  if(!file){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">Adjuntá el comprobante antes de enviar.</div>`;
+    return;
+  }
+  const { data: cita } = await sb.from('citas').select('trabajador_id, es_urgente').eq('id', citaId).single();
+  if(!cita) return;
+  const w = await obtenerPerfil(cita.trabajador_id);
+  const monto = w ? w.tarifa + (cita.es_urgente ? (w.tarifa_urgente||0) : 0) : null;
+  const ext = file.name.split('.').pop();
+  const path = `${citaId}/${Date.now()}.${ext}`;
+  const { error: upErr } = await sb.storage.from('comprobantes').upload(path, file, { upsert: true });
+  if(upErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir el comprobante: ${esc(upErr.message)}</div>`;
+    return;
+  }
+  const { error: updErr } = await sb.from('citas').update({ pago: 'declarado', monto, comprobante_pago_path: path }).eq('id', citaId);
+  if(updErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo registrar el pago: ${esc(updErr.message)}</div>`;
+    return;
+  }
+  if(w) addNotificacion(w.id, 'Un cliente declaró que ya te pagó. Revisá el comprobante y confirmalo cuando lo recibas.');
+  mostrarToast('Comprobante enviado. Te avisamos cuando el trabajador lo confirme.', 'ok');
+  cerrarDeclararPago();
+  renderMisCitas();
+}
+async function verComprobantePago(path){
+  // Abrir la ventana antes de esperar la URL firmada, para que el navegador no la bloquee.
+  const win = window.open('', '_blank');
+  const { data, error } = await sb.storage.from('comprobantes').createSignedUrl(path, 60);
+  if(error || !data){ win.close(); mostrarToast('No se pudo abrir el comprobante.', 'err'); return; }
+  win.location.href = data.signedUrl;
+}
+async function confirmarPagoRecibido(citaId){
+  const { data: c, error } = await sb.from('citas').update({ pago: 'pagado' }).eq('id', citaId).select('cliente_id, fecha').single();
+  if(error){ mostrarToast('No se pudo confirmar el pago.', 'err'); return; }
+  if(c) addNotificacion(c.cliente_id, `Confirmamos que recibiste el pago del servicio del ${c.fecha}. ¡Gracias!`);
+  mostrarToast('Pago confirmado.', 'ok');
+  renderTrabajo();
+}
+async function rechazarComprobantePago(citaId){
+  const { data: c, error } = await sb.from('citas').update({ pago: 'pendiente', comprobante_pago_path: null }).eq('id', citaId).select('cliente_id').single();
+  if(error){ mostrarToast('No se pudo rechazar el comprobante.', 'err'); return; }
+  if(c) addNotificacion(c.cliente_id, 'El trabajador no encontró tu pago. Revisá los datos y volvé a intentarlo.');
+  mostrarToast('Comprobante rechazado.', 'ok');
+  renderTrabajo();
 }
 async function renderIngresos(){
   const u = currentUser();
@@ -1507,9 +1581,17 @@ async function renderTrabajo(){
       if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}')">Cancelar</button> <button onclick="descargarIcs('${c.id}')">📅 Calendario</button>${!c.en_camino ? ` <button onclick="avisarEnCamino('${c.id}')">🚗 Voy en camino</button>` : ''}`;
       if(c.estado==='completada' && !c.calificacion_trabajador) accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificarCliente('${c.id}')">Calificar cliente</button>`;
       if(c.calificacion_trabajador) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion_trabajador.estrellas)} calificado</span>`;
+      let pagoCell;
+      if(c.pago==='pagado') pagoCell = `<span class="status-pill status-activo">pagado</span>`;
+      else if(c.pago==='declarado') pagoCell = `<div class="row-actions">
+          <button onclick="verComprobantePago('${esc(c.comprobante_pago_path)}')">Ver comprobante</button>
+          <button class="acc" onclick="confirmarPagoRecibido('${c.id}')">Confirmar</button>
+          <button class="rej" onclick="rechazarComprobantePago('${c.id}')">Rechazar</button>
+        </div>`;
+      else pagoCell = `<span class="status-pill status-pendiente">${c.pago||'pendiente'}</span>`;
       return `<tr><td>${nombreCliente}</td><td>${esc(c.fecha)}${notasIcono}</td><td>${esc(c.hora)}</td>
         <td><span class="status-pill status-${c.estado}">${c.estado}</span>${c.en_camino?'<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span>':''}</td>
-        <td><span class="status-pill status-${c.pago==='pagado'?'activo':'pendiente'}">${c.pago||'pendiente'}</span></td>
+        <td>${pagoCell}</td>
         <td><div class="row-actions">${accion}<button onclick="abrirChat('${c.id}')">Chat</button></div></td></tr>`;
     }).join('')}
     </tbody></table>
@@ -1576,6 +1658,10 @@ async function renderTrabajo(){
       <div class="field"><label for="wp-tarifa-urgente">Recargo por urgencia (COP, opcional)</label><input type="number" id="wp-tarifa-urgente" min="0" value="${u.tarifa_urgente||''}" placeholder="Ej. 15000"></div>
       <div class="field"><label for="wp-radio-cobertura">Radio máximo de desplazamiento (km, opcional)</label><input type="number" id="wp-radio-cobertura" min="0" value="${u.radio_cobertura_km||''}" placeholder="Ej. 10"></div>
       <div class="field"><label for="wp-servicios">Servicios (separados por coma)</label><input id="wp-servicios" value="${esc(u.servicios.join(', '))}"></div>
+      <div class="field"><label for="wp-datos-pago">Cómo te pagan tus clientes</label>
+        <textarea id="wp-datos-pago" rows="2" placeholder="Ej: Nequi 300 123 4567, a nombre de Andrés Pineda" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;">${esc(u.datos_pago_texto||'')}</textarea>
+        <p style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">Se les muestra a tus clientes cuando declaran que ya te pagaron. Nequi, Daviplata, cuenta bancaria — lo que prefieras.</p>
+      </div>
       <div class="field"><label>Disponibilidad semanal</label>
         <div id="wp-disponibilidad" class="disp-grid">${disponibilidadGridHTML()}</div>
       </div>
@@ -1769,11 +1855,12 @@ async function guardarPerfilTrabajador(){
   u.tarifa_urgente = document.getElementById('wp-tarifa-urgente').value ? Math.max(0, Number(document.getElementById('wp-tarifa-urgente').value)) : null;
   u.radio_cobertura_km = document.getElementById('wp-radio-cobertura').value ? Math.max(0, Number(document.getElementById('wp-radio-cobertura').value)) : null;
   u.servicios = document.getElementById('wp-servicios').value.split(',').map(s=>s.trim()).filter(Boolean);
+  u.datos_pago_texto = document.getElementById('wp-datos-pago').value.trim() || null;
   u.disponibilidad = state.wpDisponibilidad;
   const { error } = await sb.from('profiles').update({
     categoria: u.categoria, zona: u.zona, experiencia: u.experiencia,
     tarifa: u.tarifa, tarifa_urgente: u.tarifa_urgente, radio_cobertura_km: u.radio_cobertura_km,
-    servicios: u.servicios, disponibilidad: u.disponibilidad
+    servicios: u.servicios, disponibilidad: u.disponibilidad, datos_pago_texto: u.datos_pago_texto
   }).eq('id', u.id);
   if(error){
     document.getElementById('wp-msg').innerHTML = `<div class="msg err" style="margin-top:12px;">No se pudo guardar: ${esc(error.message)}</div>`;
