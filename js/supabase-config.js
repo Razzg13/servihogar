@@ -10,4 +10,4 @@ const SUPABASE_ANON_KEY = 'sb_publishable_YKyaZA59u8fpiG0S4xIONg_OeueRC9T';
 // generarla). La clave PRIVADA nunca va acá: se configura en Supabase con
 // `supabase secrets set VAPID_PRIVATE_KEY=...` para que la use la Edge
 // Function enviar-push.
-const VAPID_PUBLIC_KEY = 'REEMPLAZAR_CON_TU_CLAVE_PUBLICA_VAPID';
+const VAPID_PUBLIC_KEY = 'BPip26R_fiNypEqlKiKrZGKuV-Q1h1fllN2-TIWMKIWrqKotxWXuyZcf49mbY1HyGrbE-SgyjVE5gyw5OwhVLGM';
