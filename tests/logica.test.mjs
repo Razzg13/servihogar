@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { avg, diaSemanaDeFecha, calcularMonto, horasDisponiblesDia } = require('../js/logica.js');
+const { avg, diaSemanaDeFecha, calcularMonto, horasDisponiblesDia, insigniasTrabajador } = require('../js/logica.js');
 
 test('avg: sin reseñas devuelve null', () => {
   assert.equal(avg([]), null);
@@ -47,4 +47,32 @@ test('horasDisponiblesDia: día sin horas o sin disponibilidad devuelve []', () 
   assert.deepEqual(horasDisponiblesDia({ L: [] }, 'L'), []);
   assert.deepEqual(horasDisponiblesDia({ L: ['8:00 am'] }, 'M'), []);
   assert.deepEqual(horasDisponiblesDia(null, 'L'), []);
+});
+
+test('insigniasTrabajador: sin reseñas no da insignias', () => {
+  assert.deepEqual(insigniasTrabajador([]), []);
+  assert.deepEqual(insigniasTrabajador(null), []);
+});
+
+test('insigniasTrabajador: promedio alto con pocas reseñas no llega a "Top calificado"', () => {
+  const resenas = [{ estrellas: 5 }, { estrellas: 5 }];
+  assert.deepEqual(insigniasTrabajador(resenas), []);
+});
+
+test('insigniasTrabajador: "Recomendado" con promedio >=4.5 y al menos 3 reseñas', () => {
+  const resenas = [{ estrellas: 5 }, { estrellas: 4 }, { estrellas: 5 }];
+  assert.deepEqual(insigniasTrabajador(resenas), [{ icono: '⭐', texto: 'Recomendado' }]);
+});
+
+test('insigniasTrabajador: "Top calificado" con promedio >=4.8 y al menos 5 reseñas (excluye "Recomendado")', () => {
+  const resenas = Array(5).fill({ estrellas: 5 });
+  assert.deepEqual(insigniasTrabajador(resenas), [{ icono: '🏆', texto: 'Top calificado' }]);
+});
+
+test('insigniasTrabajador: "Muy solicitado" con 10+ reseñas se combina con la de calificación', () => {
+  const resenas = Array(10).fill({ estrellas: 5 });
+  assert.deepEqual(insigniasTrabajador(resenas), [
+    { icono: '🏆', texto: 'Top calificado' },
+    { icono: '🔥', texto: 'Muy solicitado' },
+  ]);
 });

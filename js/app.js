@@ -68,13 +68,15 @@ function toggleTheme(){
 
 async function addNotificacion(userId, texto){
   await sb.from('notificaciones').insert({ user_id: userId, texto });
-  // Envía también un correo real y una notificación push del navegador. No
-  // bloquean ni rompen el flujo si fallan (ej. todavía no configuraste
-  // RESEND_API_KEY/VAPID_*, o el usuario no activó las push): la notificación
-  // en la app ya quedó guardada de todos modos.
+  // Envía también un correo real, una notificación push del navegador y (si
+  // ya se configuró un proveedor, ver supabase/functions/enviar-whatsapp/README.md)
+  // un WhatsApp. Ninguna de las tres bloquea ni rompe el flujo si falla o no
+  // está configurada: la notificación en la app ya quedó guardada de todos modos.
   sb.functions.invoke('notificar-email', { body: { record: { user_id: userId, texto } } })
     .catch(()=>{});
   sb.functions.invoke('enviar-push', { body: { record: { user_id: userId, texto } } })
+    .catch(()=>{});
+  sb.functions.invoke('enviar-whatsapp', { body: { record: { user_id: userId, texto } } })
     .catch(()=>{});
 }
 
@@ -145,6 +147,62 @@ function mostrarToast(mensaje, tipo='info'){
   }, 3500);
 }
 
+// Reemplazan confirm()/prompt() nativos (rompen el estilo visual de la app,
+// no respetan el tema oscuro) por un modal propio con el mismo lenguaje visual
+// (.card, .btn-primary/.btn-outline). Ambas devuelven una Promise, igual que
+// esperaría el código que las llama con await.
+function cerrarModal(){
+  const overlay = document.getElementById('modal-overlay');
+  overlay.classList.add('hidden');
+  overlay.innerHTML = '';
+  document.removeEventListener('keydown', modalEscHandler);
+}
+let modalEscHandler = null;
+function confirmarModal(mensaje, opts={}){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modal-overlay');
+    const cerrar = valor => { cerrarModal(); resolve(valor); };
+    overlay.innerHTML = `<div class="card modal-box">
+      <h3>${esc(opts.titulo || 'Confirmar acción')}</h3>
+      <p>${esc(mensaje)}</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="modal-cancelar">Cancelar</button>
+        <button type="button" class="btn ${opts.peligro===false?'btn-primary':'btn-danger'}" id="modal-confirmar">${esc(opts.textoConfirmar || 'Confirmar')}</button>
+      </div>
+    </div>`;
+    overlay.classList.remove('hidden');
+    document.getElementById('modal-cancelar').onclick = () => cerrar(false);
+    document.getElementById('modal-confirmar').onclick = () => cerrar(true);
+    overlay.onclick = e => { if(e.target===overlay) cerrar(false); };
+    modalEscHandler = e => { if(e.key==='Escape') cerrar(false); };
+    document.addEventListener('keydown', modalEscHandler);
+    document.getElementById('modal-confirmar').focus();
+  });
+}
+function pedirTextoModal(mensaje, opts={}){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('modal-overlay');
+    const cerrar = valor => { cerrarModal(); resolve(valor); };
+    overlay.innerHTML = `<div class="card modal-box">
+      <h3>${esc(opts.titulo || 'Escribe una respuesta')}</h3>
+      <p>${esc(mensaje)}</p>
+      <div class="field"><textarea id="modal-texto" rows="4" placeholder="${esc(opts.placeholder||'')}"></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="modal-cancelar">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="modal-confirmar">${esc(opts.textoConfirmar || 'Enviar')}</button>
+      </div>
+    </div>`;
+    overlay.classList.remove('hidden');
+    const input = document.getElementById('modal-texto');
+    document.getElementById('modal-cancelar').onclick = () => cerrar(null);
+    document.getElementById('modal-confirmar').onclick = () => cerrar(input.value);
+    overlay.onclick = e => { if(e.target===overlay) cerrar(null); };
+    modalEscHandler = e => { if(e.key==='Escape') cerrar(null); };
+    document.addEventListener('keydown', modalEscHandler);
+    input.focus();
+  });
+}
+
 // Deshabilita el botón y le pone un texto de "cargando" mientras dura la acción
 // async (evita doble-envío y da retroalimentación de que el clic sí funcionó);
 // lo restaura siempre, incluso si la acción termina en error.
@@ -158,7 +216,7 @@ async function conCargando(btn, textoCargando, accion){
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[] };
+let state = { catFiltro:null, servicioFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[] };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -172,9 +230,26 @@ const CATS = [
   {n:'Plomería'}, {n:'Electricidad'}, {n:'Limpieza'},
   {n:'Jardinería'}, {n:'Pintura'}, {n:'Cerrajería'}
 ];
+// Sugerencias de especialidad por categoría: no son un catálogo cerrado (el
+// trabajador puede escribir cualquier texto en "servicios"), solo agilizan la
+// carga inicial del perfil con etiquetas típicas de cada oficio.
+const SERVICIOS_SUGERIDOS = {
+  'Plomería': ['Fugas de agua', 'Destape de tuberías', 'Instalación de grifería', 'Calentadores'],
+  'Electricidad': ['Instalaciones residenciales', 'Instalaciones industriales', 'Cortocircuitos', 'Iluminación'],
+  'Limpieza': ['Limpieza profunda', 'Limpieza post-obra', 'Limpieza de oficinas', 'Tapetes y muebles'],
+  'Jardinería': ['Poda de árboles', 'Diseño de jardines', 'Mantenimiento de césped', 'Riego automático'],
+  'Pintura': ['Interiores', 'Exteriores', 'Estuco', 'Impermeabilización'],
+  'Cerrajería': ['Apertura de puertas', 'Cambio de cerraduras', 'Cajas fuertes', 'Duplicado de llaves'],
+};
 function iconSVG(cat){
   return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${ICONS[cat]||''}</svg>`;
 }
+// Reemplazan los emoji 🟢/📍 usados como ícono funcional (no decorativo): esos
+// se renderizan como emoji nativo del sistema operativo (glossy, multicolor) y
+// desentonan con el resto de los íconos propios de la app (trazo fino, un
+// solo color vía currentColor). Mismo lenguaje visual que iconSVG/ICONS de arriba.
+const ICONO_DISPONIBLE = '<svg width="9" height="9" viewBox="0 0 9 9" style="vertical-align:1px;margin-right:4px;flex-shrink:0;" aria-hidden="true"><circle cx="4.5" cy="4.5" r="4.5" fill="currentColor"/></svg>';
+const ICONO_UBICACION = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px;flex-shrink:0;" aria-hidden="true"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>';
 
 /* ---------------- MAPA (zonas de Ibagué) ---------------- */
 // Coordenadas aproximadas a nivel de zona (no la dirección exacta del trabajador).
@@ -219,7 +294,7 @@ function obtenerMiUbicacion(){
   navigator.geolocation.getCurrentPosition(
     pos=>{
       state.miUbicacion = [pos.coords.latitude, pos.coords.longitude];
-      if(btn){ btn.disabled = false; btn.textContent = '📍 Ubicación activada'; }
+      if(btn){ btn.disabled = false; btn.innerHTML = `${ICONO_UBICACION}Ubicación activada`; }
       const orden = document.getElementById('buscar-orden');
       if(orden && !orden.querySelector('option[value="distancia"]')){
         const opt = document.createElement('option');
@@ -233,7 +308,7 @@ function obtenerMiUbicacion(){
       renderBuscar();
     },
     ()=>{
-      if(btn){ btn.disabled = false; btn.textContent = '📍 Cerca de mí'; }
+      if(btn){ btn.disabled = false; btn.innerHTML = `${ICONO_UBICACION}Cerca de mí`; }
       msg.innerHTML = `<div class="msg err">No pudimos acceder a tu ubicación. Revisa los permisos del navegador.</div>`;
     }
   );
@@ -265,7 +340,7 @@ async function usarMiUbicacionComoTrabajador(){
       renderTrabajo();
     },
     ()=>{
-      if(btn){ btn.disabled = false; btn.textContent = '📍 Usar mi ubicación actual'; }
+      if(btn){ btn.disabled = false; btn.innerHTML = `${ICONO_UBICACION}Usar mi ubicación actual`; }
       if(msgEl) msgEl.innerHTML = `<div class="msg err">No pudimos acceder a tu ubicación. Revisa los permisos del navegador.</div>`;
     }
   );
@@ -501,6 +576,8 @@ async function toggleNotifPanel(){
 
 /* ---------------- HOME ---------------- */
 async function renderHome(){
+  const workersBox = document.getElementById('home-workers');
+  if(workersBox) workersBox.innerHTML = `<div class="empty-note">Cargando trabajadores destacados...</div>`;
   const [trabajadores, { count: totalCitas }] = await Promise.all([
     cargarTrabajadores(),
     sb.from('citas').select('id', { count: 'exact', head: true })
@@ -528,20 +605,21 @@ function workerCardHTML(w, opts={}){
   const u = currentUser();
   const esFav = u && u.tipo==='cliente' && (u.favoritos||[]).includes(w.id);
   const distancia = state.miUbicacion ? distanciaKm(state.miUbicacion, coordsForWorker(w)) : null;
+  const insignias = insigniasTrabajador(w.resenas).map(i=>`<span class="insignia-badge" title="${esc(i.texto)}">${i.icono} ${esc(i.texto)}</span>`).join('');
   const compararCheckbox = opts.comparador ? `<label class="compare-check" onclick="event.stopPropagation();">
     <input type="checkbox" ${state.compararIds.includes(w.id)?'checked':''} onchange="toggleComparar('${w.id}', this.checked)"> Comparar</label>` : '';
   return `<div class="worker-card ticket" onclick="verPerfil('${w.id}')">
     <div class="worker-top">
       ${avatarHTML(w.nombre, w.foto_url)}
-      <div style="flex:1;"><div class="name">${esc(w.nombre)} ${w.verificado?'<span class=\"verif-badge\" title=\"Verificado\">✓</span>':''}</div><div class="role">${esc(w.categoria)} · ${esc(w.zona)}</div></div>
+      <div style="flex:1;"><div class="name">${esc(w.nombre)} ${w.verificado?'<span class=\"verif-badge\" title=\"Verificado\">✓</span>':''}${insignias}</div><div class="role">${esc(w.categoria)} · ${esc(w.zona)}</div></div>
       ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
     </div>
     <div class="perf"></div>
     <div class="worker-meta">
       <div style="display:flex; gap:6px; flex-wrap:wrap;">
         <div class="rating-pill">${rating ? '★ '+rating : 'Sin calificar'}</div>
-        ${w.disponible_ahora ? `<div class="rating-pill disp-ahora">🟢 Disponible ahora</div>` : ''}
-        ${distancia!==null ? `<div class="rating-pill dist">📍 ${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</div>` : ''}
+        ${w.disponible_ahora ? `<div class="rating-pill disp-ahora">${ICONO_DISPONIBLE}Disponible ahora</div>` : ''}
+        ${distancia!==null ? `<div class="rating-pill dist">${ICONO_UBICACION}${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</div>` : ''}
       </div>
       <div class="tarifa">Desde ${fmtCOP(w.tarifa)}</div>
     </div>
@@ -566,6 +644,7 @@ async function renderFavoritos(){
   const u = currentUser();
   const box = document.getElementById('favoritos-content');
   if(!u || u.tipo!=='cliente'){ box.innerHTML = `<div class="empty-note">Inicia sesión como cliente para guardar y ver tus favoritos.</div>`; return; }
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
   const favs = await obtenerPerfiles(u.favoritos||[]);
   box.innerHTML = favs.length ? `<div class="worker-grid">${favs.map(workerCardHTML).join('')}</div>`
     : `<div class="empty-note">Todavía no has guardado trabajadores. Toca el corazón ♡ en cualquier tarjeta para guardarlo aquí.</div>`;
@@ -576,6 +655,7 @@ async function renderPQR(){
   const u = currentUser();
   const box = document.getElementById('pqr-content');
   if(!u){ box.innerHTML = `<div class="empty-note">Inicia sesión para enviar una petición, queja o reclamo.</div>`; return; }
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
   const { data } = await sb.from('pqr').select('*').eq('user_id', u.id).order('created_at', {ascending:false});
   const propias = data || [];
   box.innerHTML = `
@@ -736,6 +816,7 @@ async function doRegister(e){
   const tipo = document.getElementById('reg-tipo').value;
   const nombre = document.getElementById('reg-nombre').value.trim();
   const correo = document.getElementById('reg-email').value.trim().toLowerCase();
+  const celular = document.getElementById('reg-celular').value.trim();
   const pass = document.getElementById('reg-pass').value;
   const pass2 = document.getElementById('reg-pass2').value;
   const msg = document.getElementById('auth-msg');
@@ -755,7 +836,7 @@ async function doRegister(e){
       msg.innerHTML = `<div class="msg ok">✓ Cuenta creada. Revisa tu correo para confirmarla; después vas a poder iniciar sesión.</div>`;
       return;
     }
-    const nuevoPerfil = { id: data.user.id, tipo, nombre, correo, estado:'activo' };
+    const nuevoPerfil = { id: data.user.id, tipo, nombre, correo, celular: celular || null, estado:'activo' };
     if(tipo==='trabajador'){
       nuevoPerfil.categoria = document.getElementById('reg-cat').value;
       nuevoPerfil.tarifa = Math.max(0, Number(document.getElementById('reg-tarifa').value)||25000);
@@ -796,9 +877,35 @@ async function renderBuscar(){
   if(btnDisp) btnDisp.classList.toggle('btn-outline', !state.filtroDisponibleAhora);
 
   const q = (document.getElementById('buscar-text').value||'').toLowerCase();
+  if(!trabajadoresListaCache){
+    const resultsBox = document.getElementById('buscar-results');
+    if(resultsBox) resultsBox.innerHTML = `<div class="empty-note">Cargando...</div>`;
+  }
   const trabajadores = await cargarTrabajadores();
   let results = trabajadores.filter(w=>w.estado==='activo');
   if(state.catFiltro) results = results.filter(w=>w.categoria===state.catFiltro);
+
+  // Chips de especialidad: solo tiene sentido ofrecerlas dentro de una categoría
+  // elegida, y se calculan sobre esos resultados antes de aplicar el propio
+  // filtro de especialidad (si no, el chip elegido desaparecería de la lista).
+  const servBox = document.getElementById('buscar-servicios-chips');
+  if(servBox){
+    if(state.catFiltro){
+      const conteo = new Map();
+      results.forEach(w=>(w.servicios||[]).forEach(s=>{
+        const key = s.trim(); if(!key) return;
+        conteo.set(key, (conteo.get(key)||0) + 1);
+      }));
+      const top = [...conteo.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([s])=>s);
+      servBox.innerHTML = top.length ? top.map(s=>
+        `<button class="chipbtn sm ${state.servicioFiltro===s?'on':''}" onclick="setServicioFiltro('${esc(s).replace(/'/g,"\\'")}')">${esc(s)}</button>`
+      ).join('') : '';
+    } else {
+      servBox.innerHTML = '';
+    }
+  }
+  if(state.servicioFiltro) results = results.filter(w=>(w.servicios||[]).some(s=>s.trim()===state.servicioFiltro));
+
   if(q) results = results.filter(w=>w.nombre.toLowerCase().includes(q) || w.categoria.toLowerCase().includes(q)
     || w.zona.toLowerCase().includes(q) || (w.servicios||[]).some(s=>s.toLowerCase().includes(q)));
   if(state.miUbicacion && state.radioFiltro){
@@ -836,7 +943,8 @@ async function renderBuscar(){
   state.resultadosBuscar = results;
   if(state.vistaBuscar==='mapa') initMapaBuscar(results);
 }
-function setCatFiltro(cat){ state.catFiltro = cat || null; renderBuscar(); }
+function setCatFiltro(cat){ state.catFiltro = cat || null; state.servicioFiltro = null; renderBuscar(); }
+function setServicioFiltro(s){ state.servicioFiltro = state.servicioFiltro===s ? null : s; renderBuscar(); }
 function setRadioFiltro(v){ state.radioFiltro = v ? Number(v) : null; renderBuscar(); }
 function toggleComparar(workerId, marcado){
   if(marcado){
@@ -914,6 +1022,7 @@ async function verPerfil(workerId){
   const rating = avg(w.resenas);
   const u = currentUser();
   const esFav = u && u.tipo==='cliente' && (u.favoritos||[]).includes(w.id);
+  const insignias = insigniasTrabajador(w.resenas).map(i=>`<span class="insignia-badge" title="${esc(i.texto)}">${i.icono} ${esc(i.texto)}</span>`).join(' ');
   const trabajadores = await cargarTrabajadores();
   const similares = trabajadores.filter(x=>x.id!==w.id && x.categoria===w.categoria && x.estado==='activo')
     .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,3);
@@ -923,7 +1032,7 @@ async function verPerfil(workerId){
         <div class="card">
           <div class="profile-header">
             ${avatarHTML(w.nombre, w.foto_url)}
-            <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''} ${w.disponible_ahora?'<span class="rating-pill disp-ahora" style="vertical-align:middle;">🟢 Disponible ahora</span>':''}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
+            <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''} ${w.disponible_ahora?`<span class="rating-pill disp-ahora" style="vertical-align:middle;">${ICONO_DISPONIBLE}Disponible ahora</span>`:''} ${insignias}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
             ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
             <button class="icon-btn" style="color:var(--navy); border-color:var(--line);" aria-label="Compartir perfil" onclick="compartirPerfil('${w.id}')">🔗</button>
           </div>
@@ -960,7 +1069,7 @@ async function verPerfil(workerId){
         <div class="card">
           <h3 style="font-size:14px; margin-bottom:10px;">Zona de trabajo</h3>
           <div class="map-box" id="perfil-mapa"></div>
-          <div class="map-caption"><span>${esc(w.zona)}, Ibagué</span><span>Ubicación aproximada</span></div>
+          <div class="map-caption"><span>${esc(w.zona)}, Ibagué</span><span>${w.radio_cobertura_km ? `Cobertura: ${w.radio_cobertura_km} km` : 'Ubicación aproximada'}</span></div>
         </div>
       </div>
     </div>
@@ -989,6 +1098,13 @@ function initMapaPerfil(w){
   tileLayer(mapPerfil);
   L.marker(coords, {icon:pinIcon('#E8752C')}).addTo(mapPerfil)
     .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}`);
+  if(w.radio_cobertura_km){
+    const circulo = L.circle(coords, {
+      radius: w.radio_cobertura_km * 1000,
+      color: '#E8752C', weight: 1.5, fillColor: '#E8752C', fillOpacity: 0.08
+    }).addTo(mapPerfil);
+    setTimeout(()=>mapPerfil && mapPerfil.fitBounds(circulo.getBounds(), {padding:[6,6]}), 90);
+  }
   setTimeout(()=>mapPerfil && mapPerfil.invalidateSize(), 80);
 }
 
@@ -1179,6 +1295,7 @@ async function renderMisCitas(){
   const u = currentUser();
   const box = document.getElementById('miscitas-content');
   if(!u || u.tipo!=='cliente'){ box.innerHTML = `<div class="empty-note">Inicia sesión como cliente para ver tus citas.</div>`; return; }
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
   const { data } = await sb.from('citas').select('*').eq('cliente_id', u.id).order('created_at', {ascending:false});
   const propias = (data||[]).map(normalizarCita);
   state.citasCacheCliente = propias;
@@ -1253,7 +1370,7 @@ function exportarCitasCSV(vista){
   URL.revokeObjectURL(url);
 }
 async function cancelarCita(id, btn){
-  if(!confirm('¿Seguro que quieres cancelar esta cita? Esta acción no se puede deshacer.')) return;
+  if(!await confirmarModal('¿Seguro que quieres cancelar esta cita? Esta acción no se puede deshacer.', {titulo:'Cancelar cita', textoConfirmar:'Sí, cancelar'})) return;
   await conCargando(btn, 'Cancelando...', async () => {
     await sb.from('citas').delete().eq('id', id);
     renderMisCitas();
@@ -1361,6 +1478,7 @@ async function renderIngresos(){
   const u = currentUser();
   const box = document.getElementById('work-ingresos');
   if(!u || u.tipo!=='trabajador'){ box.innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tus ingresos.</div>`; return; }
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
   const { data } = await sb.from('citas').select('fecha, monto').eq('trabajador_id', u.id).eq('pago', 'pagado');
   const pagos = data || [];
   const total = pagos.reduce((a,c)=>a+(c.monto||0), 0);
@@ -1564,6 +1682,7 @@ async function renderMensajesTrabajador(){
   const u = currentUser();
   const box = document.getElementById('work-mensajes');
   if(!u || u.tipo!=='trabajador'){ box.innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tus mensajes.</div>`; return; }
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
   const { data } = await sb.from('conversaciones').select('*').eq('trabajador_id', u.id).order('created_at', {ascending:false});
   const conversaciones = data || [];
   if(!conversaciones.length){ box.innerHTML = `<div class="empty-note">Todavía nadie te escribió antes de agendar.</div>`; return; }
@@ -1714,6 +1833,7 @@ function switchWorkTab(tab){
 async function renderTrabajo(){
   const u = currentUser();
   if(!u || u.tipo!=='trabajador'){ document.getElementById('work-solicitudes').innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tu panel.</div>`; return; }
+  document.getElementById('work-solicitudes').innerHTML = `<div class="empty-note">Cargando...</div>`;
 
   const { data } = await sb.from('citas').select('*').eq('trabajador_id', u.id).order('created_at', {ascending:false});
   const propias = (data||[]).map(normalizarCita);
@@ -1831,15 +1951,15 @@ async function renderTrabajo(){
         <div id="wp-verif-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
       </div>
       <div class="field"><label for="wp-cat">Categoría</label>
-        <select id="wp-cat">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
+        <select id="wp-cat" onchange="renderSugerenciasServicios()">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
       </div>
       <div class="field"><label for="wp-zona">Zona</label><input id="wp-zona" value="${esc(u.zona)}"></div>
       <div class="field">
-        <button type="button" class="btn ${u.disponible_ahora?'btn-primary':'btn-outline'}" onclick="toggleDisponibleAhora()">🟢 ${u.disponible_ahora ? 'Disponible ahora (tocá para desactivar)' : 'Marcarme disponible ahora'}</button>
+        <button type="button" class="btn ${u.disponible_ahora?'btn-primary':'btn-outline'}" onclick="toggleDisponibleAhora()">${ICONO_DISPONIBLE}${u.disponible_ahora ? 'Disponible ahora (tocá para desactivar)' : 'Marcarme disponible ahora'}</button>
         <p style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">Activalo para que los clientes vean que podés atender pedidos urgentes hoy mismo. Acordate de desactivarlo cuando ya no puedas.</p>
       </div>
       <div class="field">
-        <button type="button" class="btn btn-outline" id="btn-wp-ubicacion" onclick="usarMiUbicacionComoTrabajador()">📍 ${u.lat!=null ? 'Actualizar mi ubicación' : 'Usar mi ubicación actual'}</button>
+        <button type="button" class="btn btn-outline" id="btn-wp-ubicacion" onclick="usarMiUbicacionComoTrabajador()">${ICONO_UBICACION}${u.lat!=null ? 'Actualizar mi ubicación' : 'Usar mi ubicación actual'}</button>
         <p style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">
           ${u.lat!=null ? 'Ya estás usando tu ubicación real (con un pequeño margen, no tu dirección exacta) para que los clientes te encuentren mejor por cercanía.' : 'Además de la zona, podés compartir tu ubicación real para aparecer más preciso en "cerca de mí" — se guarda con un margen de seguridad, nunca tu dirección exacta.'}
         </p>
@@ -1849,7 +1969,10 @@ async function renderTrabajo(){
       <div class="field"><label for="wp-tarifa">Tarifa desde (COP)</label><input type="number" id="wp-tarifa" min="0" value="${u.tarifa}"></div>
       <div class="field"><label for="wp-tarifa-urgente">Recargo por urgencia (COP, opcional)</label><input type="number" id="wp-tarifa-urgente" min="0" value="${u.tarifa_urgente||''}" placeholder="Ej. 15000"></div>
       <div class="field"><label for="wp-radio-cobertura">Radio máximo de desplazamiento (km, opcional)</label><input type="number" id="wp-radio-cobertura" min="0" value="${u.radio_cobertura_km||''}" placeholder="Ej. 10"></div>
-      <div class="field"><label for="wp-servicios">Servicios (separados por coma)</label><input id="wp-servicios" value="${esc(u.servicios.join(', '))}"></div>
+      <div class="field"><label for="wp-servicios">Servicios (separados por coma)</label><input id="wp-servicios" value="${esc(u.servicios.join(', '))}">
+        <div id="wp-servicios-sugeridas" class="chipbar" style="margin-top:8px;"></div>
+      </div>
+      <div class="field"><label for="wp-celular">Celular (opcional, para avisos por WhatsApp)</label><input type="tel" id="wp-celular" value="${esc(u.celular||'')}" placeholder="Ej. 3001234567"></div>
       <div class="field"><label for="wp-datos-pago">Cómo te pagan tus clientes</label>
         <textarea id="wp-datos-pago" rows="2" placeholder="Ej: Nequi 300 123 4567, a nombre de Andrés Pineda" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;">${esc(u.datos_pago_texto||'')}</textarea>
         <p style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">Se les muestra a tus clientes cuando declaran que ya te pagaron. Nequi, Daviplata, cuenta bancaria — lo que prefieras.</p>
@@ -1877,6 +2000,7 @@ async function renderTrabajo(){
                </div>`}
         </div>`).join('') : `<p style="font-size:13px;color:var(--ink-soft);">Todavía no tienes reseñas.</p>`}
     </div>`;
+  renderSugerenciasServicios();
 }
 
 // Pura y testeable: no toca el DOM, solo evalúa el perfil recibido. `anchor`
@@ -1918,6 +2042,29 @@ function toggleDisponibilidad(dia, hora){
   const i = lista.indexOf(hora);
   if(i>-1) lista.splice(i,1); else lista.push(hora);
   document.getElementById('wp-disponibilidad').innerHTML = disponibilidadGridHTML();
+}
+// Sugerencias rápidas de "servicios" según la categoría elegida (ver
+// SERVICIOS_SUGERIDOS): solo texto libre que se agrega al campo, no una
+// lista cerrada — el trabajador puede seguir escribiendo lo que quiera.
+function renderSugerenciasServicios(){
+  const cont = document.getElementById('wp-servicios-sugeridas');
+  const catSel = document.getElementById('wp-cat');
+  const servInput = document.getElementById('wp-servicios');
+  if(!cont || !catSel || !servInput) return;
+  const actuales = servInput.value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const sugeridas = (SERVICIOS_SUGERIDOS[catSel.value] || []).filter(s=>!actuales.includes(s.toLowerCase()));
+  cont.innerHTML = sugeridas.length
+    ? `<span style="font-size:11.5px;color:var(--ink-soft);width:100%;margin-bottom:2px;">Sugerencias para ${esc(catSel.value)}, tocá para agregar:</span>
+       ${sugeridas.map(s=>`<button type="button" class="chipbtn sm" onclick="agregarServicioSugerido('${esc(s).replace(/'/g,"\\'")}')">+ ${esc(s)}</button>`).join('')}`
+    : '';
+}
+function agregarServicioSugerido(tag){
+  const servInput = document.getElementById('wp-servicios');
+  if(!servInput) return;
+  const actuales = servInput.value.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!actuales.some(s=>s.toLowerCase()===tag.toLowerCase())) actuales.push(tag);
+  servInput.value = actuales.join(', ');
+  renderSugerenciasServicios();
 }
 function mostrarFormularioVerificacion(){
   const panel = document.getElementById('verif-panel');
@@ -2029,7 +2176,7 @@ async function enviarRespuestaResena(resenaId, btn){
   });
 }
 async function eliminarResena(resenaId, workerId, btn){
-  if(!confirm('¿Eliminar esta reseña? Esta acción no se puede deshacer.')) return;
+  if(!await confirmarModal('¿Eliminar esta reseña? Esta acción no se puede deshacer.', {titulo:'Eliminar reseña', textoConfirmar:'Sí, eliminar'})) return;
   await conCargando(btn, 'Eliminando...', async () => {
     const { error } = await sb.from('resenas').delete().eq('id', resenaId);
     if(error){ mostrarToast('No se pudo eliminar la reseña.', 'err'); return; }
@@ -2051,7 +2198,7 @@ async function responderCita(id, estado, btn){
   });
 }
 async function cancelarCitaTrabajador(id, btn){
-  if(!confirm('¿Seguro que quieres cancelar esta cita ya aceptada? Se le avisará al cliente.')) return;
+  if(!await confirmarModal('¿Seguro que quieres cancelar esta cita ya aceptada? Se le avisará al cliente.', {titulo:'Cancelar cita', textoConfirmar:'Sí, cancelar'})) return;
   await conCargando(btn, 'Cancelando...', async () => {
     const { data: citaRaw } = await sb.from('citas').update({ estado:'cancelada' }).eq('id', id).select().single();
     const c = normalizarCita(citaRaw);
@@ -2104,12 +2251,14 @@ async function guardarPerfilTrabajador(btn){
   u.radio_cobertura_km = document.getElementById('wp-radio-cobertura').value ? Math.max(0, Number(document.getElementById('wp-radio-cobertura').value)) : null;
   u.servicios = document.getElementById('wp-servicios').value.split(',').map(s=>s.trim()).filter(Boolean);
   u.datos_pago_texto = document.getElementById('wp-datos-pago').value.trim() || null;
+  u.celular = document.getElementById('wp-celular').value.trim() || null;
   u.disponibilidad = state.wpDisponibilidad;
   await conCargando(btn, 'Guardando...', async () => {
     const { error } = await sb.from('profiles').update({
       categoria: u.categoria, zona: u.zona, experiencia: u.experiencia,
       tarifa: u.tarifa, tarifa_urgente: u.tarifa_urgente, radio_cobertura_km: u.radio_cobertura_km,
-      servicios: u.servicios, disponibilidad: u.disponibilidad, datos_pago_texto: u.datos_pago_texto
+      servicios: u.servicios, disponibilidad: u.disponibilidad, datos_pago_texto: u.datos_pago_texto,
+      celular: u.celular
     }).eq('id', u.id);
     if(error){
       document.getElementById('wp-msg').innerHTML = `<div class="msg err" style="margin-top:12px;">No se pudo guardar: ${esc(error.message)}</div>`;
@@ -2136,6 +2285,7 @@ function switchAdminTab(tab){
 async function renderAdmin(){
   const u = currentUser();
   if(!u || u.tipo!=='admin'){ document.getElementById('admin-usuarios').innerHTML = `<div class="empty-note">Solo el administrador puede ver este panel.</div>`; return; }
+  document.getElementById('admin-usuarios').innerHTML = `<div class="empty-note">Cargando...</div>`;
 
   const { data: todos, error } = await sb.from('profiles').select('*').neq('tipo','admin');
   const others = error ? [] : todos.map(normalizarPerfil);
@@ -2231,8 +2381,8 @@ async function verificarTrabajador(id, btn){
 async function rechazarVerificacion(id, btn){
   const u = await obtenerPerfil(id);
   if(!u) return;
-  const motivo = prompt('¿Por qué se rechaza la verificación? El trabajador va a ver este motivo.');
-  if(motivo === null) return; // canceló el prompt
+  const motivo = await pedirTextoModal('¿Por qué se rechaza la verificación? El trabajador va a ver este motivo.', {titulo:'Rechazar verificación', textoConfirmar:'Rechazar', placeholder:'Motivo del rechazo'});
+  if(motivo === null) return; // canceló el modal
   if(!motivo.trim()){ mostrarToast('Escribí un motivo para rechazar.', 'err'); return; }
   await conCargando(btn, 'Rechazando...', async () => {
     const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'rechazada', motivo: motivo.trim() }];
@@ -2260,6 +2410,7 @@ async function renderPQRAdmin(){
   const box = document.getElementById('admin-pqr');
   const u = currentUser();
   if(!u || u.tipo!=='admin'){ box.innerHTML = `<div class="empty-note">Solo el administrador puede ver este panel.</div>`; return; }
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
   const { data, error } = await sb.from('pqr').select('*').order('created_at', {ascending:false});
   const solicitudes = error ? [] : data;
   const usuarios = await obtenerPerfiles(solicitudes.map(p=>p.user_id));
@@ -2275,8 +2426,8 @@ async function renderPQRAdmin(){
     </tbody></table>` : `<div class="empty-note">No hay peticiones, quejas ni reclamos.</div>`;
 }
 async function responderPQR(id, btn){
-  const respuesta = prompt('Escribí la respuesta para el usuario:');
-  if(respuesta === null) return; // canceló el prompt
+  const respuesta = await pedirTextoModal('Escribí la respuesta para el usuario:', {titulo:'Responder PQR', textoConfirmar:'Enviar respuesta'});
+  if(respuesta === null) return; // canceló el modal
   if(!respuesta.trim()){ mostrarToast('Escribí una respuesta.', 'err'); return; }
   await conCargando(btn, 'Enviando...', async () => {
     const { data, error } = await sb.from('pqr')
@@ -2291,6 +2442,7 @@ async function responderPQR(id, btn){
 
 async function renderEstadisticas(){
   const box = document.getElementById('admin-estadisticas');
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
   const [trabajadores, { data: todasCitas }] = await Promise.all([
     cargarTrabajadores(),
     sb.from('citas').select('trabajador_id, cliente_id, monto, pago, estado')
