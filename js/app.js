@@ -1006,6 +1006,23 @@ function initMapaBuscar(results){
   if(mapBuscar){ mapBuscar.remove(); mapBuscar = null; }
   mapBuscar = L.map('buscar-mapa-box', {zoomControl:true, attributionControl:false}).setView(state.miUbicacion || IBAGUE_CENTRO, 12);
   tileLayer(mapBuscar);
+
+  // Círculos de "oferta por zona" (uno por zona distinta, tamaño según cuántos
+  // trabajadores hay ahí): de un vistazo, dónde hay más opciones y dónde hay
+  // poca oferta, antes de fijarse en los pines individuales de abajo.
+  const conteoPorZona = new Map();
+  results.forEach(w=>{
+    const zona = (w.zona||'Sin definir').trim();
+    conteoPorZona.set(zona, (conteoPorZona.get(zona)||0) + 1);
+  });
+  const maxConteo = Math.max(1, ...conteoPorZona.values());
+  conteoPorZona.forEach((n, zona)=>{
+    L.circle(coordsForZona(zona), {
+      radius: 250 + (n / maxConteo) * 550,
+      color: '#1C2B39', weight: 1, fillColor: '#1C2B39', fillOpacity: 0.08
+    }).addTo(mapBuscar).bindPopup(`<b>${esc(zona)}</b><br>${n} trabajador${n===1?'':'es'}`);
+  });
+
   results.forEach(w=>{
     const coords = coordsForWorker(w);
     L.marker(coords, {icon:pinIcon('#1C2B39')}).addTo(mapBuscar)
@@ -1326,7 +1343,7 @@ async function renderMisCitas(){
       else pagoPill = `<span class="status-pill status-pendiente">pendiente</span>`;
       return `<tr>
         <td>${w?esc(w.nombre):'—'}${c.recurrente?' <span title="Servicio recurrente">🔁</span>':''}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
-        <td><span class="status-pill status-${c.estado}">${c.estado}</span>${c.estado==='aceptada' && c.en_camino ? `<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span> <button type="button" class="btn btn-outline" style="font-size:10.5px;padding:3px 7px;margin-top:4px;" onclick="verUbicacionEnCamino('${c.id}')">Ver en mapa</button>` : ''}</td>
+        <td><span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${c.estado}</span>${c.estado==='aceptada' && c.en_camino ? `<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span> <button type="button" class="btn btn-outline" style="font-size:10.5px;padding:3px 7px;margin-top:4px;" onclick="verUbicacionEnCamino('${c.id}')">Ver en mapa</button>` : ''}</td>
         <td>${pagoPill}</td>
         <td><div class="row-actions">${accion}
           <button onclick="abrirChat('${c.id}')">Chat</button>
@@ -1374,9 +1391,10 @@ function exportarCitasCSV(vista){
   URL.revokeObjectURL(url);
 }
 async function cancelarCita(id, btn){
-  if(!await confirmarModal('¿Seguro que quieres cancelar esta cita? Esta acción no se puede deshacer.', {titulo:'Cancelar cita', textoConfirmar:'Sí, cancelar'})) return;
+  const motivo = await pedirTextoModal('¿Por qué cancelás? (opcional). Esta acción no se puede deshacer.', {titulo:'Cancelar cita', textoConfirmar:'Sí, cancelar', placeholder:'Opcional'});
+  if(motivo === null) return; // cerró el modal sin confirmar
   await conCargando(btn, 'Cancelando...', async () => {
-    await sb.from('citas').delete().eq('id', id);
+    await sb.from('citas').update({ estado:'cancelada', motivo_cancelacion: motivo.trim() || null, cancelada_por: sessionUserId }).eq('id', id);
     renderMisCitas();
   });
 }
@@ -1401,6 +1419,24 @@ function cerrarDeclararPago(){
   const panel = document.getElementById('pagar-panel');
   if(panel) panel.innerHTML = '';
 }
+// Vista previa antes de enviar: para imágenes muestra una miniatura real
+// (FileReader, nunca sale del navegador); para PDF solo confirma el nombre,
+// porque no vale la pena traer una librería de renderizado solo para esto.
+function previsualizarComprobante(input){
+  const cont = document.getElementById('comprobante-preview');
+  if(!cont) return;
+  const file = input.files[0];
+  if(!file){ cont.innerHTML = ''; return; }
+  if(file.type.startsWith('image/')){
+    const reader = new FileReader();
+    reader.onload = () => {
+      cont.innerHTML = `<img src="${reader.result}" alt="Vista previa del comprobante" style="max-width:160px;max-height:160px;border-radius:10px;border:1px solid var(--line);display:block;">`;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    cont.innerHTML = `<p style="font-size:12.5px;color:var(--ink-soft);">📄 ${esc(file.name)}</p>`;
+  }
+}
 async function renderDeclararPagoPanel(){
   const panel = document.getElementById('pagar-panel');
   if(!panel || !state.citaPagar) return;
@@ -1411,7 +1447,8 @@ async function renderDeclararPagoPanel(){
       <h3 style="font-size:15px; margin-bottom:10px;">Datos para pagarle a ${w?esc(w.nombre.split(' ')[0]):'tu trabajador'}</h3>
       <p style="font-size:13px; white-space:pre-wrap; background:var(--paper); padding:10px; border-radius:8px; margin-bottom:14px;">${w && w.datos_pago_texto ? esc(w.datos_pago_texto) : 'Este trabajador todavía no cargó sus datos de pago. Consultale directamente cómo prefiere que le transfieras.'}</p>
       <label for="comprobante-input" style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Comprobante de la transferencia</label>
-      <input type="file" id="comprobante-input" accept="image/*,application/pdf">
+      <input type="file" id="comprobante-input" accept="image/*,application/pdf" onchange="previsualizarComprobante(this)">
+      <div id="comprobante-preview" style="margin-top:10px;"></div>
       <div style="margin-top:12px; display:flex; gap:8px;">
         <button type="button" class="btn btn-primary" id="btn-declarar-pago" onclick="declararPago()">Ya transferí, enviar comprobante</button>
         <button type="button" class="btn btn-outline" onclick="cerrarDeclararPago()">Cancelar</button>
@@ -1878,7 +1915,7 @@ async function renderTrabajo(){
         </div>`;
       else pagoCell = `<span class="status-pill status-pendiente">${c.pago||'pendiente'}</span>`;
       return `<tr><td>${nombreCliente}</td><td>${esc(c.fecha)}${notasIcono}</td><td>${esc(c.hora)}</td>
-        <td><span class="status-pill status-${c.estado}">${c.estado}</span>${c.en_camino?'<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span>':''}</td>
+        <td><span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${c.estado}</span>${c.en_camino?'<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span>':''}</td>
         <td>${pagoCell}</td>
         <td><div class="row-actions">${accion}<button onclick="abrirChat('${c.id}')">Chat</button></div></td></tr>`;
     }).join('')}
@@ -2202,13 +2239,14 @@ async function responderCita(id, estado, btn){
   });
 }
 async function cancelarCitaTrabajador(id, btn){
-  if(!await confirmarModal('¿Seguro que quieres cancelar esta cita ya aceptada? Se le avisará al cliente.', {titulo:'Cancelar cita', textoConfirmar:'Sí, cancelar'})) return;
+  const motivo = await pedirTextoModal('¿Por qué cancelás? (opcional). Se le avisará al cliente.', {titulo:'Cancelar cita ya aceptada', textoConfirmar:'Sí, cancelar', placeholder:'Opcional'});
+  if(motivo === null) return; // cerró el modal sin confirmar
   await conCargando(btn, 'Cancelando...', async () => {
-    const { data: citaRaw } = await sb.from('citas').update({ estado:'cancelada' }).eq('id', id).select().single();
+    const { data: citaRaw } = await sb.from('citas').update({ estado:'cancelada', motivo_cancelacion: motivo.trim() || null, cancelada_por: sessionUserId }).eq('id', id).select().single();
     const c = normalizarCita(citaRaw);
     if(c){
       const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
-      if(cliente && w) addNotificacion(cliente.id, `${w.nombre} canceló tu cita del ${c.fecha}.`);
+      if(cliente && w) addNotificacion(cliente.id, `${w.nombre} canceló tu cita del ${c.fecha}.${motivo.trim() ? ' Motivo: '+motivo.trim() : ''}`);
     }
     mostrarToast('Cita cancelada.', 'ok');
     renderTrabajo();
@@ -2298,8 +2336,28 @@ async function renderAdmin(){
   const { data: reportesData } = await sb.from('reportes').select('*').order('created_at', {ascending:false});
   const reportes = (reportesData||[]).map(r=>({ ...r, deNombre: r.de_nombre, citaId: r.cita_id }));
   const reportesAbiertos = reportes.filter(r=>r.estado==='abierto').length;
-  const { data: todasCitas } = await sb.from('citas').select('estado');
+  const { data: todasCitas } = await sb.from('citas').select('cliente_id, trabajador_id, estado, cancelada_por');
   const citasPendientes = (todasCitas||[]).filter(c=>c.estado==='pendiente').length;
+
+  // Cancelaciones por usuario: cuenta quién apretó "cancelar" (cancelada_por),
+  // no solo quién participó en la cita.
+  const cancelacionesPorUsuario = new Map();
+  (todasCitas||[]).forEach(c=>{
+    if(c.estado==='cancelada' && c.cancelada_por) cancelacionesPorUsuario.set(c.cancelada_por, (cancelacionesPorUsuario.get(c.cancelada_por)||0) + 1);
+  });
+  // Reportes por usuario: el esquema no distingue de qué lado de la cita es la
+  // falta (reportes.de_nombre es solo texto), así que esto es una aproximación:
+  // cuenta reportes en citas donde el usuario participó, como cliente o trabajador.
+  const citasDeReportes = await Promise.all(reportes.map(async r=>{
+    const { data } = await sb.from('citas').select('*').eq('id', r.citaId).single();
+    return normalizarCita(data);
+  }));
+  const reportesPorUsuario = new Map();
+  citasDeReportes.forEach(c=>{
+    if(!c) return;
+    [c.clienteId, c.trabajadorId].forEach(id=>{ if(id) reportesPorUsuario.set(id, (reportesPorUsuario.get(id)||0) + 1); });
+  });
+
   document.getElementById('admin-usuarios').innerHTML = `
     <div class="admin-summary">
       <div class="admin-stat"><span>Usuarios</span><b>${others.length}</b><small>${trabajadores.length} trabajadores</small></div>
@@ -2307,7 +2365,7 @@ async function renderAdmin(){
       <div class="admin-stat"><span>Citas</span><b>${(todasCitas||[]).length}</b><small>${citasPendientes} por responder</small></div>
       <div class="admin-stat"><span>Reportes</span><b>${reportesAbiertos}</b><small>Abiertos</small></div>
     </div>
-    <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Correo</th><th>Estado</th><th>Verificación</th><th>Acción</th></tr></thead><tbody>
+    <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Correo</th><th>Estado</th><th>Verificación</th><th>Historial</th><th>Acción</th></tr></thead><tbody>
     ${others.map(x=>{
       let verifCell = '—';
       if(x.tipo==='trabajador'){
@@ -2323,17 +2381,18 @@ async function renderAdmin(){
           : x.verificacion_rechazada ? `<span class="status-pill status-rechazada" title="${esc(x.verificacion_motivo_rechazo||'')}">Rechazada</span>${historialIcono}`
           : `<span class="status-pill status-bloqueado">Sin solicitar</span>`;
       }
+      const nCancel = cancelacionesPorUsuario.get(x.id) || 0;
+      const nRep = reportesPorUsuario.get(x.id) || 0;
+      const llamaAtencion = nCancel >= 3 || nRep >= 2;
+      const historialCell = `<span${llamaAtencion ? ' class="status-pill status-rechazada"' : ''} title="Reportes: cuenta citas con reporte donde participó, no distingue de qué lado es la falta.">${nCancel} canceladas · ${nRep} reportes</span>`;
       return `<tr><td>${esc(x.nombre)}</td><td>${x.tipo}</td><td>${esc(x.correo)}</td>
       <td><span class="status-pill status-${x.estado}">${x.estado}</span></td>
       <td>${verifCell}</td>
+      <td>${historialCell}</td>
       <td><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="toggleEstadoUsuario('${x.id}', this)">${x.estado==='activo'?'Bloquear':'Activar'}</button></td></tr>`;
     }).join('')}
     </tbody></table>`;
 
-  const citasDeReportes = await Promise.all(reportes.map(async r=>{
-    const { data } = await sb.from('citas').select('*').eq('id', r.citaId).single();
-    return normalizarCita(data);
-  }));
   const trabajadoresDeReportes = await obtenerPerfiles(citasDeReportes.filter(Boolean).map(c=>c.trabajadorId));
   const trabajadorPorId = new Map(trabajadoresDeReportes.map(w=>[w && w.id, w]));
   document.getElementById('admin-reportes').innerHTML = reportes.length ? `
