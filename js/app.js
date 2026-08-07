@@ -94,32 +94,34 @@ async function activarNotificacionesPush(){
   if(VAPID_PUBLIC_KEY.startsWith('REEMPLAZAR_')){
     mostrarToast('Notificaciones push no configuradas todavía.', 'err'); return;
   }
-  try{
-    const permiso = await Notification.requestPermission();
-    if(permiso !== 'granted'){
-      mostrarToast('No diste permiso para notificaciones.', 'err'); return;
+  const btn = document.getElementById('push-btn');
+  await conCargando(btn, '🔕', async () => {
+    try{
+      const permiso = await Notification.requestPermission();
+      if(permiso !== 'granted'){
+        mostrarToast('No diste permiso para notificaciones.', 'err'); return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if(!sub){
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+      const json = sub.toJSON();
+      await sb.from('push_subscriptions').upsert({
+        user_id: u.id,
+        endpoint: json.endpoint,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
+      }, { onConflict: 'endpoint' });
+      mostrarToast('Notificaciones push activadas.', 'ok');
+      if(btn) btn.remove();
+    }catch(e){
+      mostrarToast('No se pudo activar notificaciones push.', 'err');
     }
-    const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-    if(!sub){
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      });
-    }
-    const json = sub.toJSON();
-    await sb.from('push_subscriptions').upsert({
-      user_id: u.id,
-      endpoint: json.endpoint,
-      p256dh: json.keys.p256dh,
-      auth: json.keys.auth,
-    }, { onConflict: 'endpoint' });
-    mostrarToast('Notificaciones push activadas.', 'ok');
-    const btn = document.getElementById('push-btn');
-    if(btn) btn.remove();
-  }catch(e){
-    mostrarToast('No se pudo activar notificaciones push.', 'err');
-  }
+  });
 }
 
 // Aviso flotante para confirmar acciones importantes (además del panel de campana).
@@ -141,6 +143,17 @@ function mostrarToast(mensaje, tipo='info'){
     el.classList.add('out');
     setTimeout(()=>el.remove(), 220);
   }, 3500);
+}
+
+// Deshabilita el botón y le pone un texto de "cargando" mientras dura la acción
+// async (evita doble-envío y da retroalimentación de que el clic sí funcionó);
+// lo restaura siempre, incluso si la acción termina en error.
+async function conCargando(btn, textoCargando, accion){
+  if(!btn) return accion();
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = textoCargando;
+  try{ return await accion(); }
+  finally{ btn.disabled = false; btn.textContent = textoOriginal; }
 }
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
@@ -579,7 +592,7 @@ async function renderPQR(){
       <div class="field"><label for="pqr-mensaje">Mensaje</label>
         <textarea id="pqr-mensaje" rows="4" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;"></textarea>
       </div>
-      <button class="btn btn-primary" onclick="enviarPQR()">Enviar</button>
+      <button class="btn btn-primary" id="btn-enviar-pqr" onclick="enviarPQR()">Enviar</button>
       <div id="pqr-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
     </div>
     <h3 style="font-size:15px; margin-bottom:12px;">Tus solicitudes anteriores</h3>
@@ -605,13 +618,16 @@ async function enviarPQR(){
     msgEl.innerHTML = `<div class="msg err">Completá el asunto y el mensaje.</div>`;
     return;
   }
-  const { error } = await sb.from('pqr').insert({ user_id: u.id, tipo, asunto, mensaje });
-  if(error){
-    msgEl.innerHTML = `<div class="msg err">No se pudo enviar: ${esc(error.message)}</div>`;
-    return;
-  }
-  mostrarToast('Enviado. Te avisamos por notificación cuando te respondamos.', 'ok');
-  renderPQR();
+  const btn = document.getElementById('btn-enviar-pqr');
+  await conCargando(btn, 'Enviando...', async () => {
+    const { error } = await sb.from('pqr').insert({ user_id: u.id, tipo, asunto, mensaje });
+    if(error){
+      msgEl.innerHTML = `<div class="msg err">No se pudo enviar: ${esc(error.message)}</div>`;
+      return;
+    }
+    mostrarToast('Enviado. Te avisamos por notificación cuando te respondamos.', 'ok');
+    renderPQR();
+  });
 }
 
 function irABuscarConCategoria(cat){ state.catFiltro = cat; nav('buscar'); }
@@ -644,15 +660,18 @@ async function enviarRecuperacion(e){
   e.preventDefault();
   const email = document.getElementById('forgot-email').value.trim().toLowerCase();
   const msg = document.getElementById('auth-msg');
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + window.location.pathname
+  const btn = e.target.querySelector('button[type="submit"]');
+  await conCargando(btn, 'Enviando...', async () => {
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if(error){
+      msg.innerHTML = `<div class="msg err">No se pudo enviar el correo. Intenta de nuevo.</div>`;
+      return;
+    }
+    msg.innerHTML = `<div class="msg ok">✓ Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña.</div>`;
+    document.getElementById('form-forgot').reset();
   });
-  if(error){
-    msg.innerHTML = `<div class="msg err">No se pudo enviar el correo. Intenta de nuevo.</div>`;
-    return false;
-  }
-  msg.innerHTML = `<div class="msg ok">✓ Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña.</div>`;
-  document.getElementById('form-forgot').reset();
   return false;
 }
 async function guardarNuevaContrasena(e){
@@ -664,14 +683,17 @@ async function guardarNuevaContrasena(e){
     msg.innerHTML = `<div class="msg err">Las contraseñas no coinciden.</div>`;
     return false;
   }
-  const { error } = await sb.auth.updateUser({ password: p1 });
-  if(error){
-    msg.innerHTML = `<div class="msg err">No se pudo actualizar la contraseña. El enlace puede haber expirado — solicita uno nuevo desde "Iniciar sesión".</div>`;
-    return false;
-  }
-  await cargarPerfilActual();
-  mostrarToast('Contraseña actualizada correctamente.', 'ok');
-  nav(currentProfile ? (currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home') : 'home');
+  const btn = e.target.querySelector('button[type="submit"]');
+  await conCargando(btn, 'Guardando...', async () => {
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    if(error){
+      msg.innerHTML = `<div class="msg err">No se pudo actualizar la contraseña. El enlace puede haber expirado — solicita uno nuevo desde "Iniciar sesión".</div>`;
+      return;
+    }
+    await cargarPerfilActual();
+    mostrarToast('Contraseña actualizada correctamente.', 'ok');
+    nav(currentProfile ? (currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home') : 'home');
+  });
   return false;
 }
 function toggleWorkerFields(){
@@ -689,21 +711,24 @@ async function doLogin(e){
   const email = document.getElementById('login-email').value.trim().toLowerCase();
   const pass = document.getElementById('login-pass').value;
   const msg = document.getElementById('auth-msg');
-  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
-  if(error){ msg.innerHTML = `<div class="msg err">Correo o contraseña incorrectos.</div>`; return false; }
-  sessionUserId = data.user.id;
-  await cargarPerfilActual();
-  if(currentProfile && currentProfile.estado==='bloqueado'){
-    msg.innerHTML = `<div class="msg err">Esta cuenta está bloqueada. Contacta al administrador.</div>`;
-    await sb.auth.signOut(); sessionUserId = null; currentProfile = null;
-    return false;
-  }
-  msg.innerHTML='';
-  nav(currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home');
-  suscribirNotificaciones(currentProfile.id);
-  const { data: pendientes } = await sb.from('notificaciones').select('*').eq('user_id', currentProfile.id).eq('leida', false);
-  if(pendientes && pendientes.length===1) mostrarToast(pendientes[0].texto, 'info');
-  else if(pendientes && pendientes.length>1) mostrarToast(`Tienes ${pendientes.length} notificaciones nuevas.`, 'info');
+  const btn = e.target.querySelector('button[type="submit"]');
+  await conCargando(btn, 'Ingresando...', async () => {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if(error){ msg.innerHTML = `<div class="msg err">Correo o contraseña incorrectos.</div>`; return; }
+    sessionUserId = data.user.id;
+    await cargarPerfilActual();
+    if(currentProfile && currentProfile.estado==='bloqueado'){
+      msg.innerHTML = `<div class="msg err">Esta cuenta está bloqueada. Contacta al administrador.</div>`;
+      await sb.auth.signOut(); sessionUserId = null; currentProfile = null;
+      return;
+    }
+    msg.innerHTML='';
+    nav(currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home');
+    suscribirNotificaciones(currentProfile.id);
+    const { data: pendientes } = await sb.from('notificaciones').select('*').eq('user_id', currentProfile.id).eq('leida', false);
+    if(pendientes && pendientes.length===1) mostrarToast(pendientes[0].texto, 'info');
+    else if(pendientes && pendientes.length>1) mostrarToast(`Tienes ${pendientes.length} notificaciones nuevas.`, 'info');
+  });
   return false;
 }
 async function doRegister(e){
@@ -717,33 +742,36 @@ async function doRegister(e){
   if(pass !== pass2){
     msg.innerHTML = `<div class="msg err">Las contraseñas no coinciden.</div>`; return false;
   }
-  const { data, error } = await sb.auth.signUp({ email: correo, password: pass });
-  if(error){
-    msg.innerHTML = `<div class="msg err">${error.message.includes('registered') ? 'Ya existe una cuenta con ese correo.' : 'No se pudo crear la cuenta. Intenta de nuevo.'}</div>`;
-    return false;
-  }
-  if(!data.session){
-    // El proyecto de Supabase tiene "Confirm email" activado: signUp no deja
-    // sesión activa todavía, así que no podemos crear el perfil (RLS lo exige).
-    msg.innerHTML = `<div class="msg ok">✓ Cuenta creada. Revisa tu correo para confirmarla; después vas a poder iniciar sesión.</div>`;
-    return false;
-  }
-  const nuevoPerfil = { id: data.user.id, tipo, nombre, correo, estado:'activo' };
-  if(tipo==='trabajador'){
-    nuevoPerfil.categoria = document.getElementById('reg-cat').value;
-    nuevoPerfil.tarifa = Math.max(0, Number(document.getElementById('reg-tarifa').value)||25000);
-    nuevoPerfil.experiencia = 0; nuevoPerfil.zona = 'Sin definir';
-    nuevoPerfil.servicios = []; nuevoPerfil.disponibilidad = disponibilidadPorDefecto();
-  }
-  const { error: perfilError } = await sb.from('profiles').insert(nuevoPerfil);
-  if(perfilError){
-    msg.innerHTML = `<div class="msg err">Cuenta creada, pero hubo un problema guardando el perfil: ${esc(perfilError.message)}</div>`;
-    return false;
-  }
-  sessionUserId = data.user.id;
-  await cargarPerfilActual();
-  nav(tipo==='trabajador' ? 'trabajo' : 'home');
-  suscribirNotificaciones(sessionUserId);
+  const btn = e.target.querySelector('button[type="submit"]');
+  await conCargando(btn, 'Creando cuenta...', async () => {
+    const { data, error } = await sb.auth.signUp({ email: correo, password: pass });
+    if(error){
+      msg.innerHTML = `<div class="msg err">${error.message.includes('registered') ? 'Ya existe una cuenta con ese correo.' : 'No se pudo crear la cuenta. Intenta de nuevo.'}</div>`;
+      return;
+    }
+    if(!data.session){
+      // El proyecto de Supabase tiene "Confirm email" activado: signUp no deja
+      // sesión activa todavía, así que no podemos crear el perfil (RLS lo exige).
+      msg.innerHTML = `<div class="msg ok">✓ Cuenta creada. Revisa tu correo para confirmarla; después vas a poder iniciar sesión.</div>`;
+      return;
+    }
+    const nuevoPerfil = { id: data.user.id, tipo, nombre, correo, estado:'activo' };
+    if(tipo==='trabajador'){
+      nuevoPerfil.categoria = document.getElementById('reg-cat').value;
+      nuevoPerfil.tarifa = Math.max(0, Number(document.getElementById('reg-tarifa').value)||25000);
+      nuevoPerfil.experiencia = 0; nuevoPerfil.zona = 'Sin definir';
+      nuevoPerfil.servicios = []; nuevoPerfil.disponibilidad = disponibilidadPorDefecto();
+    }
+    const { error: perfilError } = await sb.from('profiles').insert(nuevoPerfil);
+    if(perfilError){
+      msg.innerHTML = `<div class="msg err">Cuenta creada, pero hubo un problema guardando el perfil: ${esc(perfilError.message)}</div>`;
+      return;
+    }
+    sessionUserId = data.user.id;
+    await cargarPerfilActual();
+    nav(tipo==='trabajador' ? 'trabajo' : 'home');
+    suscribirNotificaciones(sessionUserId);
+  });
   return false;
 }
 async function logout(){
@@ -917,7 +945,7 @@ async function verPerfil(workerId){
             ${r.fotos && r.fotos.length ? `<div class="galeria-grid" style="max-width:280px;">${r.fotos.map(url=>`<div class="galeria-item"><img src="${esc(url)}" alt=""></div>`).join('')}</div>` : ''}
             <div class="who">— ${esc(r.cliente)}</div>
             ${r.respuesta_trabajador ? `<div class="resena-respuesta"><b>Respuesta de ${esc(w.nombre.split(' ')[0])}:</b> ${esc(r.respuesta_trabajador)}</div>` : ''}
-            ${u && u.tipo==='admin' ? `<button type="button" class="btn btn-outline" style="font-size:11px;padding:4px 8px;margin-top:8px;" onclick="eliminarResena(${r.id}, '${w.id}')">🗑 Eliminar reseña</button>` : ''}
+            ${u && u.tipo==='admin' ? `<button type="button" class="btn btn-outline" style="font-size:11px;padding:4px 8px;margin-top:8px;" onclick="eliminarResena(${r.id}, '${w.id}', this)">🗑 Eliminar reseña</button>` : ''}
           </div>`).join('') : '<p style="font-size:13px;color:var(--ink-soft);">Todavía no tiene comentarios.</p>'}
         </div>
       </div>
@@ -926,7 +954,7 @@ async function verPerfil(workerId){
           <h3 style="font-size:14px; margin-bottom:12px;">Solicitar este servicio</h3>
           <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:16px;">Elige un día y una hora para que ${esc(w.nombre.split(' ')[0])} confirme tu cita.</p>
           <button class="btn btn-primary" style="width:100%;" onclick="irAAgendar('${w.id}')">Agendar cita</button>
-          ${u && u.tipo==='cliente' ? `<button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="contactarTrabajador('${w.id}')">💬 Preguntar antes de agendar</button>` : ''}
+          ${u && u.tipo==='cliente' ? `<button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="contactarTrabajador('${w.id}', this)">💬 Preguntar antes de agendar</button>` : ''}
           <div id="perfil-chat-panel" style="margin-top:12px;"></div>
         </div>
         <div class="card">
@@ -1073,65 +1101,68 @@ async function confirmarCita(){
   if(!state.diaSel || !state.horaSel){
     msg.innerHTML = `<div class="msg err">Elige un día y una hora antes de confirmar.</div>`; return;
   }
-  const target = calMesObjetivo();
-  const mesesLower = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const anioSufijo = target.getFullYear()!==new Date().getFullYear() ? ` de ${target.getFullYear()}` : '';
-  const fecha = `${state.diaSel} de ${mesesLower[target.getMonth()]}${anioSufijo}`;
-  const dia = diaSemanaDeFecha(new Date(target.getFullYear(), target.getMonth(), state.diaSel));
-  const w = await obtenerPerfil(state.workerActual);
-  if(!w){ msg.innerHTML = `<div class="msg err">No encontramos ese trabajador.</div>`; return; }
-  const disponibles = horasDisponiblesDia(w.disponibilidad, dia);
-  if(!disponibles.includes(state.horaSel)){
-    msg.innerHTML = `<div class="msg err">Ese horario ya no está disponible para este trabajador. Elige otro.</div>`;
-    return;
-  }
-  let ocupadasQuery = sb.from('citas').select('id')
-    .eq('trabajador_id', w.id).eq('fecha', fecha).eq('hora', state.horaSel).neq('estado','rechazada');
-  if(state.citaReagendar) ocupadasQuery = ocupadasQuery.neq('id', state.citaReagendar);
-  const { data: ocupadas } = await ocupadasQuery;
-  if(ocupadas && ocupadas.length){
-    msg.innerHTML = `<div class="msg err">Ese horario ya está reservado con este trabajador. Elige otro día u hora, o
-      <button type="button" class="link-btn" onclick="anotarseListaEspera('${w.id}','${fecha}','${state.horaSel}')">anotate en la lista de espera</button>.</div>`;
-    return;
-  }
-  const cliente = currentUser();
-  const inicio = parseFechaHoraCita(fecha, state.horaSel);
-  const notasCliente = document.getElementById('agendar-notas').value.trim();
-  const direccionReferencia = document.getElementById('agendar-direccion').value.trim();
-  const recurrente = document.getElementById('chk-recurrente').checked;
-  const esUrgente = state.calMonthOffset===0 && state.diaSel===new Date().getDate();
-  if(state.citaReagendar){
-    const { data: cita, error } = await sb.from('citas').update({
-      fecha, hora: state.horaSel, estado: 'pendiente', inicio: inicio ? inicio.toISOString() : null,
-      notas_cliente: notasCliente || null, direccion_referencia: direccionReferencia || null,
-      recurrente, es_urgente: esUrgente
-    }).eq('id', state.citaReagendar).select().single();
-    if(error){
-      msg.innerHTML = `<div class="msg err">No se pudo reagendar: ${esc(error.message)}</div>`;
+  const btn = document.getElementById('btn-confirmar-cita');
+  await conCargando(btn, 'Confirmando...', async () => {
+    const target = calMesObjetivo();
+    const mesesLower = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const anioSufijo = target.getFullYear()!==new Date().getFullYear() ? ` de ${target.getFullYear()}` : '';
+    const fecha = `${state.diaSel} de ${mesesLower[target.getMonth()]}${anioSufijo}`;
+    const dia = diaSemanaDeFecha(new Date(target.getFullYear(), target.getMonth(), state.diaSel));
+    const w = await obtenerPerfil(state.workerActual);
+    if(!w){ msg.innerHTML = `<div class="msg err">No encontramos ese trabajador.</div>`; return; }
+    const disponibles = horasDisponiblesDia(w.disponibilidad, dia);
+    if(!disponibles.includes(state.horaSel)){
+      msg.innerHTML = `<div class="msg err">Ese horario ya no está disponible para este trabajador. Elige otro.</div>`;
       return;
     }
-    addNotificacion(w.id, `${cliente.nombre} reagendó su cita para el ${cita.fecha} · ${cita.hora}. Debes confirmarla de nuevo.`);
-    msg.innerHTML = `<div class="msg ok">✓ Cita reagendada. Quedó pendiente de confirmación otra vez.</div>`;
-    mostrarToast('Cita reagendada.', 'ok');
-    state.citaReagendar = null;
+    let ocupadasQuery = sb.from('citas').select('id')
+      .eq('trabajador_id', w.id).eq('fecha', fecha).eq('hora', state.horaSel).neq('estado','rechazada');
+    if(state.citaReagendar) ocupadasQuery = ocupadasQuery.neq('id', state.citaReagendar);
+    const { data: ocupadas } = await ocupadasQuery;
+    if(ocupadas && ocupadas.length){
+      msg.innerHTML = `<div class="msg err">Ese horario ya está reservado con este trabajador. Elige otro día u hora, o
+        <button type="button" class="link-btn" onclick="anotarseListaEspera('${w.id}','${fecha}','${state.horaSel}')">anotate en la lista de espera</button>.</div>`;
+      return;
+    }
+    const cliente = currentUser();
+    const inicio = parseFechaHoraCita(fecha, state.horaSel);
+    const notasCliente = document.getElementById('agendar-notas').value.trim();
+    const direccionReferencia = document.getElementById('agendar-direccion').value.trim();
+    const recurrente = document.getElementById('chk-recurrente').checked;
+    const esUrgente = state.calMonthOffset===0 && state.diaSel===new Date().getDate();
+    if(state.citaReagendar){
+      const { data: cita, error } = await sb.from('citas').update({
+        fecha, hora: state.horaSel, estado: 'pendiente', inicio: inicio ? inicio.toISOString() : null,
+        notas_cliente: notasCliente || null, direccion_referencia: direccionReferencia || null,
+        recurrente, es_urgente: esUrgente
+      }).eq('id', state.citaReagendar).select().single();
+      if(error){
+        msg.innerHTML = `<div class="msg err">No se pudo reagendar: ${esc(error.message)}</div>`;
+        return;
+      }
+      addNotificacion(w.id, `${cliente.nombre} reagendó su cita para el ${cita.fecha} · ${cita.hora}. Debes confirmarla de nuevo.`);
+      msg.innerHTML = `<div class="msg ok">✓ Cita reagendada. Quedó pendiente de confirmación otra vez.</div>`;
+      mostrarToast('Cita reagendada.', 'ok');
+      state.citaReagendar = null;
+      setTimeout(()=>nav('miscitas'), 900);
+      return;
+    }
+    const { data: cita, error } = await sb.from('citas').insert({
+      cliente_id: sessionUserId, trabajador_id: w.id,
+      fecha, hora: state.horaSel, estado: 'pendiente', pago: 'pendiente',
+      inicio: inicio ? inicio.toISOString() : null,
+      notas_cliente: notasCliente || null, direccion_referencia: direccionReferencia || null,
+      recurrente, es_urgente: esUrgente
+    }).select().single();
+    if(error){
+      msg.innerHTML = `<div class="msg err">No se pudo agendar: ${esc(error.message)}</div>`;
+      return;
+    }
+    addNotificacion(w.id, `Nueva solicitud de ${cliente.nombre} para el ${cita.fecha} · ${cita.hora}`);
+    msg.innerHTML = `<div class="msg ok">✓ Cita enviada. Quedó pendiente de confirmación por parte del trabajador.</div>`;
+    mostrarToast('Cita enviada. Quedó pendiente de confirmación.', 'ok');
     setTimeout(()=>nav('miscitas'), 900);
-    return;
-  }
-  const { data: cita, error } = await sb.from('citas').insert({
-    cliente_id: sessionUserId, trabajador_id: w.id,
-    fecha, hora: state.horaSel, estado: 'pendiente', pago: 'pendiente',
-    inicio: inicio ? inicio.toISOString() : null,
-    notas_cliente: notasCliente || null, direccion_referencia: direccionReferencia || null,
-    recurrente, es_urgente: esUrgente
-  }).select().single();
-  if(error){
-    msg.innerHTML = `<div class="msg err">No se pudo agendar: ${esc(error.message)}</div>`;
-    return;
-  }
-  addNotificacion(w.id, `Nueva solicitud de ${cliente.nombre} para el ${cita.fecha} · ${cita.hora}`);
-  msg.innerHTML = `<div class="msg ok">✓ Cita enviada. Quedó pendiente de confirmación por parte del trabajador.</div>`;
-  mostrarToast('Cita enviada. Quedó pendiente de confirmación.', 'ok');
-  setTimeout(()=>nav('miscitas'), 900);
+  });
 }
 async function anotarseListaEspera(trabajadorId, fecha, hora){
   const u = currentUser();
@@ -1160,8 +1191,8 @@ async function renderMisCitas(){
     ${propias.map(c=>{
       const w = porId.get(c.trabajadorId);
       let accion = '';
-      if(c.estado==='pendiente') accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="cancelarCita('${c.id}')">Cancelar</button>`;
-      if(c.estado==='aceptada') accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="marcarCompletada('${c.id}')">Marcar completado</button>`;
+      if(c.estado==='pendiente') accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="cancelarCita('${c.id}', this)">Cancelar</button>`;
+      if(c.estado==='aceptada') accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="marcarCompletada('${c.id}', this)">Marcar completado</button>`;
       if(c.estado==='completada' && !c.calificacion) accion = `<button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificar('${c.id}')">Calificar</button>`;
       if(c.calificacion) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion.estrellas)} calificado</span>`;
       if(c.estado==='pendiente' || c.estado==='aceptada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="reagendarCita('${c.id}')">Reagendar</button>`;
@@ -1221,14 +1252,18 @@ function exportarCitasCSV(vista){
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
-async function cancelarCita(id){
+async function cancelarCita(id, btn){
   if(!confirm('¿Seguro que quieres cancelar esta cita? Esta acción no se puede deshacer.')) return;
-  await sb.from('citas').delete().eq('id', id);
-  renderMisCitas();
+  await conCargando(btn, 'Cancelando...', async () => {
+    await sb.from('citas').delete().eq('id', id);
+    renderMisCitas();
+  });
 }
-async function marcarCompletada(id){
-  await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
-  renderMisCitas();
+async function marcarCompletada(id, btn){
+  await conCargando(btn, 'Guardando...', async () => {
+    await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
+    renderMisCitas();
+  });
 }
 // Pago manual por transferencia: el cliente declara que pagó por fuera de la
 // app (Nequi, cuenta bancaria, etc.) y sube un comprobante; el trabajador
@@ -1257,7 +1292,7 @@ async function renderDeclararPagoPanel(){
       <label for="comprobante-input" style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Comprobante de la transferencia</label>
       <input type="file" id="comprobante-input" accept="image/*,application/pdf">
       <div style="margin-top:12px; display:flex; gap:8px;">
-        <button type="button" class="btn btn-primary" onclick="declararPago()">Ya transferí, enviar comprobante</button>
+        <button type="button" class="btn btn-primary" id="btn-declarar-pago" onclick="declararPago()">Ya transferí, enviar comprobante</button>
         <button type="button" class="btn btn-outline" onclick="cerrarDeclararPago()">Cancelar</button>
       </div>
       <div id="declarar-pago-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
@@ -1273,26 +1308,29 @@ async function declararPago(){
     if(msgEl) msgEl.innerHTML = `<div class="msg err">Adjuntá el comprobante antes de enviar.</div>`;
     return;
   }
-  const { data: cita } = await sb.from('citas').select('trabajador_id, es_urgente').eq('id', citaId).single();
-  if(!cita) return;
-  const w = await obtenerPerfil(cita.trabajador_id);
-  const monto = calcularMonto(w, cita.es_urgente);
-  const ext = file.name.split('.').pop();
-  const path = `${citaId}/${Date.now()}.${ext}`;
-  const { error: upErr } = await sb.storage.from('comprobantes').upload(path, file, { upsert: true });
-  if(upErr){
-    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir el comprobante: ${esc(upErr.message)}</div>`;
-    return;
-  }
-  const { error: updErr } = await sb.from('citas').update({ pago: 'declarado', monto, comprobante_pago_path: path }).eq('id', citaId);
-  if(updErr){
-    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo registrar el pago: ${esc(updErr.message)}</div>`;
-    return;
-  }
-  if(w) addNotificacion(w.id, 'Un cliente declaró que ya te pagó. Revisá el comprobante y confirmalo cuando lo recibas.');
-  mostrarToast('Comprobante enviado. Te avisamos cuando el trabajador lo confirme.', 'ok');
-  cerrarDeclararPago();
-  renderMisCitas();
+  const btn = document.getElementById('btn-declarar-pago');
+  await conCargando(btn, 'Enviando...', async () => {
+    const { data: cita } = await sb.from('citas').select('trabajador_id, es_urgente').eq('id', citaId).single();
+    if(!cita) return;
+    const w = await obtenerPerfil(cita.trabajador_id);
+    const monto = calcularMonto(w, cita.es_urgente);
+    const ext = file.name.split('.').pop();
+    const path = `${citaId}/${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('comprobantes').upload(path, file, { upsert: true });
+    if(upErr){
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir el comprobante: ${esc(upErr.message)}</div>`;
+      return;
+    }
+    const { error: updErr } = await sb.from('citas').update({ pago: 'declarado', monto, comprobante_pago_path: path }).eq('id', citaId);
+    if(updErr){
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo registrar el pago: ${esc(updErr.message)}</div>`;
+      return;
+    }
+    if(w) addNotificacion(w.id, 'Un cliente declaró que ya te pagó. Revisá el comprobante y confirmalo cuando lo recibas.');
+    mostrarToast('Comprobante enviado. Te avisamos cuando el trabajador lo confirme.', 'ok');
+    cerrarDeclararPago();
+    renderMisCitas();
+  });
 }
 async function verComprobantePago(path){
   // Abrir la ventana antes de esperar la URL firmada, para que el navegador no la bloquee.
@@ -1301,19 +1339,23 @@ async function verComprobantePago(path){
   if(error || !data){ win.close(); mostrarToast('No se pudo abrir el comprobante.', 'err'); return; }
   win.location.href = data.signedUrl;
 }
-async function confirmarPagoRecibido(citaId){
-  const { data: c, error } = await sb.from('citas').update({ pago: 'pagado' }).eq('id', citaId).select('cliente_id, fecha').single();
-  if(error){ mostrarToast('No se pudo confirmar el pago.', 'err'); return; }
-  if(c) addNotificacion(c.cliente_id, `El trabajador confirmó que recibió tu pago del servicio del ${c.fecha}. ¡Gracias!`);
-  mostrarToast('Pago confirmado.', 'ok');
-  renderTrabajo();
+async function confirmarPagoRecibido(citaId, btn){
+  await conCargando(btn, 'Confirmando...', async () => {
+    const { data: c, error } = await sb.from('citas').update({ pago: 'pagado' }).eq('id', citaId).select('cliente_id, fecha').single();
+    if(error){ mostrarToast('No se pudo confirmar el pago.', 'err'); return; }
+    if(c) addNotificacion(c.cliente_id, `El trabajador confirmó que recibió tu pago del servicio del ${c.fecha}. ¡Gracias!`);
+    mostrarToast('Pago confirmado.', 'ok');
+    renderTrabajo();
+  });
 }
-async function rechazarComprobantePago(citaId){
-  const { data: c, error } = await sb.from('citas').update({ pago: 'pendiente', comprobante_pago_path: null }).eq('id', citaId).select('cliente_id').single();
-  if(error){ mostrarToast('No se pudo rechazar el comprobante.', 'err'); return; }
-  if(c) addNotificacion(c.cliente_id, 'El trabajador no encontró tu pago. Revisá los datos y volvé a intentarlo.');
-  mostrarToast('Comprobante rechazado.', 'ok');
-  renderTrabajo();
+async function rechazarComprobantePago(citaId, btn){
+  await conCargando(btn, 'Rechazando...', async () => {
+    const { data: c, error } = await sb.from('citas').update({ pago: 'pendiente', comprobante_pago_path: null }).eq('id', citaId).select('cliente_id').single();
+    if(error){ mostrarToast('No se pudo rechazar el comprobante.', 'err'); return; }
+    if(c) addNotificacion(c.cliente_id, 'El trabajador no encontró tu pago. Revisá los datos y volvé a intentarlo.');
+    mostrarToast('Comprobante rechazado.', 'ok');
+    renderTrabajo();
+  });
 }
 async function renderIngresos(){
   const u = currentUser();
@@ -1346,7 +1388,7 @@ function abrirCalificar(id){
     <textarea id="calif-comentario" placeholder="Cuéntanos cómo te fue..." rows="3" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;margin-bottom:12px;"></textarea>
     <label style="font-size:12px;color:var(--ink-soft);display:block;margin-bottom:8px;">Agregar fotos del trabajo (opcional, hasta 4)</label>
     <input type="file" id="calif-fotos" accept="image/*" multiple style="margin-bottom:12px;">
-    <button class="btn btn-primary" onclick="enviarCalificacion('${id}')">Enviar calificación</button>
+    <button class="btn btn-primary" onclick="enviarCalificacion('${id}', this)">Enviar calificación</button>
   </div>`;
   state.estrellasSel = 5; setStars(5);
 }
@@ -1354,34 +1396,36 @@ function setStars(n){
   state.estrellasSel = n;
   document.querySelectorAll('#stars-input span').forEach(s=>s.classList.toggle('on', Number(s.dataset.n)<=n));
 }
-async function enviarCalificacion(citaId){
+async function enviarCalificacion(citaId, btn){
   const u = currentUser();
   const comentario = document.getElementById('calif-comentario').value.trim() || 'Sin comentarios.';
   const panel = document.getElementById('calificar-panel');
   const fotosInput = document.getElementById('calif-fotos');
   const archivos = fotosInput ? Array.from(fotosInput.files).slice(0, 4) : [];
-  const fotos = [];
-  for(let i=0; i<archivos.length; i++){
-    const ext = archivos[i].name.split('.').pop();
-    const path = `${u.id}/${citaId}-${Date.now()}-${i}.${ext}`;
-    const { error: upErr } = await sb.storage.from('resenas-fotos').upload(path, archivos[i]);
-    if(!upErr){
-      const { data: pub } = sb.storage.from('resenas-fotos').getPublicUrl(path);
-      fotos.push(pub.publicUrl);
+  await conCargando(btn, 'Enviando...', async () => {
+    const fotos = [];
+    for(let i=0; i<archivos.length; i++){
+      const ext = archivos[i].name.split('.').pop();
+      const path = `${u.id}/${citaId}-${Date.now()}-${i}.${ext}`;
+      const { error: upErr } = await sb.storage.from('resenas-fotos').upload(path, archivos[i]);
+      if(!upErr){
+        const { data: pub } = sb.storage.from('resenas-fotos').getPublicUrl(path);
+        fotos.push(pub.publicUrl);
+      }
     }
-  }
-  // worker_id y cliente_nombre los completa un trigger en la base de datos a
-  // partir de la cita real (evita que se pueda calificar sin haber contratado).
-  const { data, error } = await sb.from('resenas').insert({
-    cita_id: citaId, estrellas: state.estrellasSel, comentario, fotos
-  }).select('worker_id').single();
-  if(error){
-    if(panel) panel.innerHTML = `<div class="msg err">No se pudo enviar la calificación: ${esc(error.message)}</div>`;
-    return;
-  }
-  await sb.from('citas').update({ calificacion: { estrellas: state.estrellasSel, comentario } }).eq('id', citaId);
-  invalidarPerfil(data.worker_id);
-  renderMisCitas();
+    // worker_id y cliente_nombre los completa un trigger en la base de datos a
+    // partir de la cita real (evita que se pueda calificar sin haber contratado).
+    const { data, error } = await sb.from('resenas').insert({
+      cita_id: citaId, estrellas: state.estrellasSel, comentario, fotos
+    }).select('worker_id').single();
+    if(error){
+      if(panel) panel.innerHTML = `<div class="msg err">No se pudo enviar la calificación: ${esc(error.message)}</div>`;
+      return;
+    }
+    await sb.from('citas').update({ calificacion: { estrellas: state.estrellasSel, comentario } }).eq('id', citaId);
+    invalidarPerfil(data.worker_id);
+    renderMisCitas();
+  });
 }
 function abrirCalificarCliente(citaId){
   const panel = document.getElementById('calificar-cliente-panel');
@@ -1389,7 +1433,7 @@ function abrirCalificarCliente(citaId){
     <h3 style="font-size:14px;margin-bottom:10px;">Califica a este cliente</h3>
     <div class="stars-input" id="stars-input-cliente">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="setStarsCliente(${n})">★</span>`).join('')}</div>
     <textarea id="calif-cliente-comentario" placeholder="Notas sobre este cliente (opcional)..." rows="3" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;margin-bottom:12px;"></textarea>
-    <button class="btn btn-primary" onclick="enviarCalificacionCliente('${citaId}')">Enviar calificación</button>
+    <button class="btn btn-primary" onclick="enviarCalificacionCliente('${citaId}', this)">Enviar calificación</button>
   </div>`;
   state.estrellasSelCliente = 5; setStarsCliente(5);
 }
@@ -1397,14 +1441,16 @@ function setStarsCliente(n){
   state.estrellasSelCliente = n;
   document.querySelectorAll('#stars-input-cliente span').forEach(s=>s.classList.toggle('on', Number(s.dataset.n)<=n));
 }
-async function enviarCalificacionCliente(citaId){
+async function enviarCalificacionCliente(citaId, btn){
   const comentario = document.getElementById('calif-cliente-comentario').value.trim();
-  const { error } = await sb.from('citas').update({
-    calificacion_trabajador: { estrellas: state.estrellasSelCliente, comentario }
-  }).eq('id', citaId);
-  if(error){ mostrarToast('No se pudo enviar la calificación.', 'err'); return; }
-  mostrarToast('Calificación enviada.', 'ok');
-  renderTrabajo();
+  await conCargando(btn, 'Enviando...', async () => {
+    const { error } = await sb.from('citas').update({
+      calificacion_trabajador: { estrellas: state.estrellasSelCliente, comentario }
+    }).eq('id', citaId);
+    if(error){ mostrarToast('No se pudo enviar la calificación.', 'err'); return; }
+    mostrarToast('Calificación enviada.', 'ok');
+    renderTrabajo();
+  });
 }
 
 /* ---------------- CHAT POR CITA ---------------- */
@@ -1429,7 +1475,7 @@ async function renderChat(){
     <div class="chat-box" id="chat-box">${(mensajes||[]).map(m=>`<div class="chat-msg ${m.de===u.id?'mio':''}"><b>${m.de===u.id?'Tú':esc(otro.nombre.split(' ')[0])}:</b> ${esc(m.texto)}</div>`).join('') || '<div class="empty-note" style="padding:10px;">Aún no hay mensajes. Escribe el primero.</div>'}</div>
     <div style="display:flex; gap:8px;">
       <input id="chat-input" placeholder="Escribe un mensaje..." style="flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;" onkeydown="if(event.key==='Enter') enviarMensaje('${citaId}')">
-      <button class="btn btn-primary" onclick="enviarMensaje('${citaId}')">Enviar</button>
+      <button class="btn btn-primary" id="btn-chat-enviar" onclick="enviarMensaje('${citaId}')">Enviar</button>
     </div>
   </div>`;
   const box = document.getElementById('chat-box'); if(box) box.scrollTop = box.scrollHeight;
@@ -1438,34 +1484,39 @@ async function enviarMensaje(citaId){
   const input = document.getElementById('chat-input');
   const texto = input.value.trim();
   if(!texto) return;
-  const u = currentUser();
-  const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
-  const c = normalizarCita(citaRaw);
-  if(!c) return;
-  await sb.from('mensajes').insert({ cita_id: citaId, de: u.id, texto });
-  const otroId = u.tipo==='cliente' ? c.trabajadorId : c.clienteId;
-  addNotificacion(otroId, `Nuevo mensaje de ${u.nombre.split(' ')[0]} sobre la cita del ${c.fecha}.`);
-  input.value = '';
-  renderChat();
+  const btn = document.getElementById('btn-chat-enviar');
+  await conCargando(btn, 'Enviando...', async () => {
+    const u = currentUser();
+    const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
+    const c = normalizarCita(citaRaw);
+    if(!c) return;
+    await sb.from('mensajes').insert({ cita_id: citaId, de: u.id, texto });
+    const otroId = u.tipo==='cliente' ? c.trabajadorId : c.clienteId;
+    addNotificacion(otroId, `Nuevo mensaje de ${u.nombre.split(' ')[0]} sobre la cita del ${c.fecha}.`);
+    input.value = '';
+    renderChat();
+  });
 }
 
 /* ---------------- CHAT ANTES DE AGENDAR (sin cita todavía) ---------------- */
-async function contactarTrabajador(workerId){
+async function contactarTrabajador(workerId, btn){
   const u = currentUser();
   if(!u || u.tipo!=='cliente') return;
-  const { data: existente } = await sb.from('conversaciones').select('id')
-    .eq('cliente_id', u.id).eq('trabajador_id', workerId).maybeSingle();
-  let conversacionId = existente && existente.id;
-  if(!conversacionId){
-    const { data: nueva, error } = await sb.from('conversaciones')
-      .insert({ cliente_id: u.id, trabajador_id: workerId }).select('id').single();
-    if(error){
-      document.getElementById('perfil-chat-panel').innerHTML = `<div class="msg err">No se pudo abrir el chat: ${esc(error.message)}</div>`;
-      return;
+  await conCargando(btn, 'Abriendo chat...', async () => {
+    const { data: existente } = await sb.from('conversaciones').select('id')
+      .eq('cliente_id', u.id).eq('trabajador_id', workerId).maybeSingle();
+    let conversacionId = existente && existente.id;
+    if(!conversacionId){
+      const { data: nueva, error } = await sb.from('conversaciones')
+        .insert({ cliente_id: u.id, trabajador_id: workerId }).select('id').single();
+      if(error){
+        document.getElementById('perfil-chat-panel').innerHTML = `<div class="msg err">No se pudo abrir el chat: ${esc(error.message)}</div>`;
+        return;
+      }
+      conversacionId = nueva.id;
     }
-    conversacionId = nueva.id;
-  }
-  abrirChatPrevio(conversacionId);
+    abrirChatPrevio(conversacionId);
+  });
 }
 function abrirChatPrevio(conversacionId){
   state.conversacionActual = conversacionId;
@@ -1488,7 +1539,7 @@ async function renderChatPrevio(){
     <div class="chat-box" id="chat-box-previo">${(mensajes||[]).map(m=>`<div class="chat-msg ${m.de===u.id?'mio':''}"><b>${m.de===u.id?'Tú':esc(otro.nombre.split(' ')[0])}:</b> ${esc(m.texto)}</div>`).join('') || '<div class="empty-note" style="padding:10px;">Todavía no hay mensajes. Escribe el primero.</div>'}</div>
     <div style="display:flex; gap:8px;">
       <input id="chat-input-previo" placeholder="Escribe un mensaje..." style="flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;" onkeydown="if(event.key==='Enter') enviarMensajePrevio('${conversacionId}')">
-      <button class="btn btn-primary" onclick="enviarMensajePrevio('${conversacionId}')">Enviar</button>
+      <button class="btn btn-primary" id="btn-chat-previo-enviar" onclick="enviarMensajePrevio('${conversacionId}')">Enviar</button>
     </div>
   </div>`;
   const box = document.getElementById('chat-box-previo'); if(box) box.scrollTop = box.scrollHeight;
@@ -1497,14 +1548,17 @@ async function enviarMensajePrevio(conversacionId){
   const input = document.getElementById('chat-input-previo');
   const texto = input.value.trim();
   if(!texto) return;
-  const u = currentUser();
-  const { data: conv } = await sb.from('conversaciones').select('*').eq('id', conversacionId).single();
-  if(!conv) return;
-  await sb.from('mensajes').insert({ conversacion_id: conversacionId, de: u.id, texto });
-  const otroId = u.tipo==='cliente' ? conv.trabajador_id : conv.cliente_id;
-  addNotificacion(otroId, `Nuevo mensaje de ${u.nombre.split(' ')[0]}.`);
-  input.value = '';
-  renderChatPrevio();
+  const btn = document.getElementById('btn-chat-previo-enviar');
+  await conCargando(btn, 'Enviando...', async () => {
+    const u = currentUser();
+    const { data: conv } = await sb.from('conversaciones').select('*').eq('id', conversacionId).single();
+    if(!conv) return;
+    await sb.from('mensajes').insert({ conversacion_id: conversacionId, de: u.id, texto });
+    const otroId = u.tipo==='cliente' ? conv.trabajador_id : conv.cliente_id;
+    addNotificacion(otroId, `Nuevo mensaje de ${u.nombre.split(' ')[0]}.`);
+    input.value = '';
+    renderChatPrevio();
+  });
 }
 async function renderMensajesTrabajador(){
   const u = currentUser();
@@ -1536,22 +1590,24 @@ async function abrirReportar(citaId){
   panel.innerHTML = `<div class="card">
     <h3 style="font-size:14px;margin-bottom:10px;">Reportar un problema</h3>
     <textarea id="reporte-motivo" placeholder="Cuéntanos qué pasó..." rows="3" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;margin-bottom:12px;"></textarea>
-    <button class="btn btn-primary" onclick="enviarReporte('${citaId}')">Enviar reporte</button>
+    <button class="btn btn-primary" onclick="enviarReporte('${citaId}', this)">Enviar reporte</button>
   </div>`;
 }
-async function enviarReporte(citaId){
+async function enviarReporte(citaId, btn){
   const motivo = document.getElementById('reporte-motivo').value.trim();
   if(!motivo) return;
-  const { data: existentes } = await sb.from('reportes').select('id').eq('cita_id', citaId).eq('estado','abierto');
-  if(existentes && existentes.length) return;
-  const u = currentUser();
-  const { error } = await sb.from('reportes').insert({ cita_id: citaId, de_nombre: u.nombre, motivo, estado:'abierto' });
-  if(error){
-    document.getElementById('reportar-panel').innerHTML = `<div class="msg err">No se pudo enviar el reporte: ${esc(error.message)}</div>`;
-    return;
-  }
-  document.getElementById('reportar-panel').innerHTML = `<div class="msg ok">✓ Reporte enviado. El administrador lo revisará pronto.</div>`;
-  mostrarToast('Reporte enviado.', 'ok');
+  await conCargando(btn, 'Enviando...', async () => {
+    const { data: existentes } = await sb.from('reportes').select('id').eq('cita_id', citaId).eq('estado','abierto');
+    if(existentes && existentes.length) return;
+    const u = currentUser();
+    const { error } = await sb.from('reportes').insert({ cita_id: citaId, de_nombre: u.nombre, motivo, estado:'abierto' });
+    if(error){
+      document.getElementById('reportar-panel').innerHTML = `<div class="msg err">No se pudo enviar el reporte: ${esc(error.message)}</div>`;
+      return;
+    }
+    document.getElementById('reportar-panel').innerHTML = `<div class="msg ok">✓ Reporte enviado. El administrador lo revisará pronto.</div>`;
+    mostrarToast('Reporte enviado.', 'ok');
+  });
 }
 
 /* ---------------- CALENDARIO PERSONAL (.ics) ---------------- */
@@ -1685,16 +1741,16 @@ async function renderTrabajo(){
       const notasIcono = (c.notas_cliente || c.direccion_referencia)
         ? ` <span title="${esc([c.direccion_referencia?'Dirección: '+c.direccion_referencia:'', c.notas_cliente?'Notas: '+c.notas_cliente:''].filter(Boolean).join(' · '))}">📝</span>` : '';
       let accion = '';
-      if(c.estado==='pendiente') accion = `<div class="row-actions"><button class="acc" onclick="responderCita('${c.id}','aceptada')">Aceptar</button><button class="rej" onclick="responderCita('${c.id}','rechazada')">Rechazar</button></div>`;
-      if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}')">Cancelar</button> <button onclick="descargarIcs('${c.id}')">📅 Calendario</button>${!c.en_camino ? ` <button onclick="avisarEnCamino('${c.id}')">🚗 Voy en camino</button>` : ''}`;
+      if(c.estado==='pendiente') accion = `<div class="row-actions"><button class="acc" onclick="responderCita('${c.id}','aceptada', this)">Aceptar</button><button class="rej" onclick="responderCita('${c.id}','rechazada', this)">Rechazar</button></div>`;
+      if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}', this)">Cancelar</button> <button onclick="descargarIcs('${c.id}')">📅 Calendario</button>${!c.en_camino ? ` <button onclick="avisarEnCamino('${c.id}', this)">🚗 Voy en camino</button>` : ''}`;
       if(c.estado==='completada' && !c.calificacion_trabajador) accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificarCliente('${c.id}')">Calificar cliente</button>`;
       if(c.calificacion_trabajador) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion_trabajador.estrellas)} calificado</span>`;
       let pagoCell;
       if(c.pago==='pagado') pagoCell = `<span class="status-pill status-activo">pagado</span>`;
       else if(c.pago==='declarado') pagoCell = `<div class="row-actions">
           <button onclick="verComprobantePago('${esc(c.comprobante_pago_path)}')">Ver comprobante</button>
-          <button class="acc" onclick="confirmarPagoRecibido('${c.id}')">Confirmar</button>
-          <button class="rej" onclick="rechazarComprobantePago('${c.id}')">Rechazar</button>
+          <button class="acc" onclick="confirmarPagoRecibido('${c.id}', this)">Confirmar</button>
+          <button class="rej" onclick="rechazarComprobantePago('${c.id}', this)">Rechazar</button>
         </div>`;
       else pagoCell = `<span class="status-pill status-pendiente">${c.pago||'pendiente'}</span>`;
       return `<tr><td>${nombreCliente}</td><td>${esc(c.fecha)}${notasIcono}</td><td>${esc(c.hora)}</td>
@@ -1771,7 +1827,7 @@ async function renderTrabajo(){
         </select>
         <label for="wp-doc-input" style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Documento (foto o PDF)</label>
         <input type="file" id="wp-doc-input" accept="image/*,application/pdf">
-        <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="solicitarVerificacion()">Enviar solicitud</button>
+        <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="solicitarVerificacion(this)">Enviar solicitud</button>
         <div id="wp-verif-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
       </div>
       <div class="field"><label for="wp-cat">Categoría</label>
@@ -1801,7 +1857,7 @@ async function renderTrabajo(){
       <div class="field"><label>Disponibilidad semanal</label>
         <div id="wp-disponibilidad" class="disp-grid">${disponibilidadGridHTML()}</div>
       </div>
-      <button class="btn btn-primary" onclick="guardarPerfilTrabajador()">Guardar cambios</button>
+      <button class="btn btn-primary" onclick="guardarPerfilTrabajador(this)">Guardar cambios</button>
       <div id="wp-msg" role="status" aria-live="polite"></div>
     </div>
     <div class="card" style="max-width:520px; margin-top:16px;">
@@ -1817,7 +1873,7 @@ async function renderTrabajo(){
             : `<button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-top:8px;" onclick="mostrarFormularioRespuesta(${r.id})">Responder</button>
                <div id="respuesta-form-${r.id}" class="hidden" style="margin-top:8px;">
                  <textarea id="respuesta-texto-${r.id}" rows="2" placeholder="Escribe tu respuesta..." style="width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:12.5px;"></textarea>
-                 <button type="button" class="btn btn-primary" style="font-size:12px;padding:6px 10px;margin-top:6px;" onclick="enviarRespuestaResena(${r.id})">Enviar respuesta</button>
+                 <button type="button" class="btn btn-primary" style="font-size:12px;padding:6px 10px;margin-top:6px;" onclick="enviarRespuestaResena(${r.id}, this)">Enviar respuesta</button>
                </div>`}
         </div>`).join('') : `<p style="font-size:13px;color:var(--ink-soft);">Todavía no tienes reseñas.</p>`}
     </div>`;
@@ -1889,7 +1945,7 @@ async function subirFotoPerfil(){
   invalidarPerfil(u.id);
   renderTrabajo();
 }
-async function solicitarVerificacion(){
+async function solicitarVerificacion(btn){
   const u = currentUser();
   const input = document.getElementById('wp-doc-input');
   const tipoSel = document.getElementById('wp-doc-tipo');
@@ -1899,25 +1955,27 @@ async function solicitarVerificacion(){
     if(msgEl) msgEl.innerHTML = `<div class="msg err">Adjunta un documento antes de enviar la solicitud.</div>`;
     return;
   }
-  const ext = file.name.split('.').pop();
-  const path = `${u.id}/${Date.now()}.${ext}`;
-  const { error: upErr } = await sb.storage.from('verificaciones').upload(path, file, { upsert: true });
-  if(upErr){
-    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir el documento: ${esc(upErr.message)}</div>`;
-    return;
-  }
-  const tipoDoc = tipoSel ? tipoSel.value : null;
-  const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'solicitada', tipo_doc: tipoDoc }];
-  await sb.from('profiles').update({
-    verificacion_pendiente: true,
-    verificacion_doc_path: path,
-    verificacion_tipo_doc: tipoDoc,
-    verificacion_rechazada: false,
-    verificacion_motivo_rechazo: null,
-    verificacion_historial: historial,
-  }).eq('id', u.id);
-  invalidarPerfil(u.id);
-  renderTrabajo();
+  await conCargando(btn, 'Enviando...', async () => {
+    const ext = file.name.split('.').pop();
+    const path = `${u.id}/${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('verificaciones').upload(path, file, { upsert: true });
+    if(upErr){
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir el documento: ${esc(upErr.message)}</div>`;
+      return;
+    }
+    const tipoDoc = tipoSel ? tipoSel.value : null;
+    const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'solicitada', tipo_doc: tipoDoc }];
+    await sb.from('profiles').update({
+      verificacion_pendiente: true,
+      verificacion_doc_path: path,
+      verificacion_tipo_doc: tipoDoc,
+      verificacion_rechazada: false,
+      verificacion_motivo_rechazo: null,
+      verificacion_historial: historial,
+    }).eq('id', u.id);
+    invalidarPerfil(u.id);
+    renderTrabajo();
+  });
 }
 async function subirFotoGaleria(){
   const u = currentUser();
@@ -1957,63 +2015,81 @@ function mostrarFormularioRespuesta(resenaId){
   const el = document.getElementById(`respuesta-form-${resenaId}`);
   if(el) el.classList.toggle('hidden');
 }
-async function enviarRespuestaResena(resenaId){
+async function enviarRespuestaResena(resenaId, btn){
   const texto = document.getElementById(`respuesta-texto-${resenaId}`).value.trim();
   if(!texto) return;
-  const { error } = await sb.from('resenas').update({
-    respuesta_trabajador: texto, respuesta_fecha: new Date().toISOString()
-  }).eq('id', resenaId);
-  if(error){ mostrarToast('No se pudo enviar la respuesta.', 'err'); return; }
-  invalidarPerfil(currentUser().id);
-  mostrarToast('Respuesta enviada.', 'ok');
-  renderTrabajo();
+  await conCargando(btn, 'Enviando...', async () => {
+    const { error } = await sb.from('resenas').update({
+      respuesta_trabajador: texto, respuesta_fecha: new Date().toISOString()
+    }).eq('id', resenaId);
+    if(error){ mostrarToast('No se pudo enviar la respuesta.', 'err'); return; }
+    invalidarPerfil(currentUser().id);
+    mostrarToast('Respuesta enviada.', 'ok');
+    renderTrabajo();
+  });
 }
-async function eliminarResena(resenaId, workerId){
+async function eliminarResena(resenaId, workerId, btn){
   if(!confirm('¿Eliminar esta reseña? Esta acción no se puede deshacer.')) return;
-  const { error } = await sb.from('resenas').delete().eq('id', resenaId);
-  if(error){ mostrarToast('No se pudo eliminar la reseña.', 'err'); return; }
-  invalidarPerfil(workerId);
-  mostrarToast('Reseña eliminada.', 'ok');
-  verPerfil(workerId);
+  await conCargando(btn, 'Eliminando...', async () => {
+    const { error } = await sb.from('resenas').delete().eq('id', resenaId);
+    if(error){ mostrarToast('No se pudo eliminar la reseña.', 'err'); return; }
+    invalidarPerfil(workerId);
+    mostrarToast('Reseña eliminada.', 'ok');
+    verPerfil(workerId);
+  });
 }
-async function responderCita(id, estado){
-  const { data: citaRaw } = await sb.from('citas').update({ estado }).eq('id', id).select().single();
-  const c = normalizarCita(citaRaw);
-  if(c){
-    const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
-    if(cliente && w) addNotificacion(cliente.id, `${w.nombre} ${estado==='aceptada'?'aceptó':'rechazó'} tu cita del ${c.fecha}.`);
-  }
-  mostrarToast(estado==='aceptada' ? 'Cita aceptada.' : 'Cita rechazada.', 'ok');
-  renderTrabajo();
+async function responderCita(id, estado, btn){
+  await conCargando(btn, estado==='aceptada' ? 'Aceptando...' : 'Rechazando...', async () => {
+    const { data: citaRaw } = await sb.from('citas').update({ estado }).eq('id', id).select().single();
+    const c = normalizarCita(citaRaw);
+    if(c){
+      const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
+      if(cliente && w) addNotificacion(cliente.id, `${w.nombre} ${estado==='aceptada'?'aceptó':'rechazó'} tu cita del ${c.fecha}.`);
+    }
+    mostrarToast(estado==='aceptada' ? 'Cita aceptada.' : 'Cita rechazada.', 'ok');
+    renderTrabajo();
+  });
 }
-async function cancelarCitaTrabajador(id){
+async function cancelarCitaTrabajador(id, btn){
   if(!confirm('¿Seguro que quieres cancelar esta cita ya aceptada? Se le avisará al cliente.')) return;
-  const { data: citaRaw } = await sb.from('citas').update({ estado:'cancelada' }).eq('id', id).select().single();
-  const c = normalizarCita(citaRaw);
-  if(c){
-    const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
-    if(cliente && w) addNotificacion(cliente.id, `${w.nombre} canceló tu cita del ${c.fecha}.`);
-  }
-  mostrarToast('Cita cancelada.', 'ok');
-  renderTrabajo();
+  await conCargando(btn, 'Cancelando...', async () => {
+    const { data: citaRaw } = await sb.from('citas').update({ estado:'cancelada' }).eq('id', id).select().single();
+    const c = normalizarCita(citaRaw);
+    if(c){
+      const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
+      if(cliente && w) addNotificacion(cliente.id, `${w.nombre} canceló tu cita del ${c.fecha}.`);
+    }
+    mostrarToast('Cita cancelada.', 'ok');
+    renderTrabajo();
+  });
 }
-function avisarEnCamino(citaId){
+function avisarEnCamino(citaId, btn){
   if(!navigator.geolocation){ mostrarToast('Tu navegador no soporta ubicación.', 'err'); return; }
+  const textoOriginal = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Ubicando...'; }
   navigator.geolocation.getCurrentPosition(
     async pos=>{
+      if(btn) btn.textContent = 'Avisando...';
       const { data: citaRaw, error } = await sb.from('citas').update({
         en_camino: true, en_camino_lat: pos.coords.latitude, en_camino_lng: pos.coords.longitude
       }).eq('id', citaId).select().single();
-      if(error){ mostrarToast('No se pudo avisar. Intenta de nuevo.', 'err'); return; }
+      if(error){
+        if(btn){ btn.disabled = false; btn.textContent = textoOriginal; }
+        mostrarToast('No se pudo avisar. Intenta de nuevo.', 'err');
+        return;
+      }
       const c = normalizarCita(citaRaw);
       addNotificacion(c.clienteId, `Tu trabajador va en camino para la cita del ${c.fecha} a las ${c.hora}.`);
       mostrarToast('Avisamos al cliente que vas en camino.', 'ok');
       renderTrabajo();
     },
-    ()=>mostrarToast('No pudimos acceder a tu ubicación. Revisa los permisos del navegador.', 'err')
+    ()=>{
+      if(btn){ btn.disabled = false; btn.textContent = textoOriginal; }
+      mostrarToast('No pudimos acceder a tu ubicación. Revisa los permisos del navegador.', 'err');
+    }
   );
 }
-async function guardarPerfilTrabajador(){
+async function guardarPerfilTrabajador(btn){
   const u = currentUser();
   const zona = document.getElementById('wp-zona').value.trim();
   if(!zona){
@@ -2029,17 +2105,19 @@ async function guardarPerfilTrabajador(){
   u.servicios = document.getElementById('wp-servicios').value.split(',').map(s=>s.trim()).filter(Boolean);
   u.datos_pago_texto = document.getElementById('wp-datos-pago').value.trim() || null;
   u.disponibilidad = state.wpDisponibilidad;
-  const { error } = await sb.from('profiles').update({
-    categoria: u.categoria, zona: u.zona, experiencia: u.experiencia,
-    tarifa: u.tarifa, tarifa_urgente: u.tarifa_urgente, radio_cobertura_km: u.radio_cobertura_km,
-    servicios: u.servicios, disponibilidad: u.disponibilidad, datos_pago_texto: u.datos_pago_texto
-  }).eq('id', u.id);
-  if(error){
-    document.getElementById('wp-msg').innerHTML = `<div class="msg err" style="margin-top:12px;">No se pudo guardar: ${esc(error.message)}</div>`;
-    return;
-  }
-  invalidarPerfil(u.id);
-  document.getElementById('wp-msg').innerHTML = `<div class="msg ok" style="margin-top:12px;">Perfil actualizado.</div>`;
+  await conCargando(btn, 'Guardando...', async () => {
+    const { error } = await sb.from('profiles').update({
+      categoria: u.categoria, zona: u.zona, experiencia: u.experiencia,
+      tarifa: u.tarifa, tarifa_urgente: u.tarifa_urgente, radio_cobertura_km: u.radio_cobertura_km,
+      servicios: u.servicios, disponibilidad: u.disponibilidad, datos_pago_texto: u.datos_pago_texto
+    }).eq('id', u.id);
+    if(error){
+      document.getElementById('wp-msg').innerHTML = `<div class="msg err" style="margin-top:12px;">No se pudo guardar: ${esc(error.message)}</div>`;
+      return;
+    }
+    invalidarPerfil(u.id);
+    document.getElementById('wp-msg').innerHTML = `<div class="msg ok" style="margin-top:12px;">Perfil actualizado.</div>`;
+  });
 }
 
 /* ---------------- PANEL ADMIN ---------------- */
@@ -2087,14 +2165,14 @@ async function renderAdmin(){
           : '';
         const historialIcono = historialTitle ? ` <span title="${esc(historialTitle)}" style="cursor:help;">🕘</span>` : '';
         verifCell = x.verificado ? `<span class="verif-badge">✓ Verificado</span>${historialIcono}`
-          : x.verificacionPendiente ? `${verDoc}<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verificarTrabajador('${x.id}')">Verificar</button><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="rechazarVerificacion('${x.id}')">Rechazar</button>${historialIcono}`
+          : x.verificacionPendiente ? `${verDoc}<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verificarTrabajador('${x.id}', this)">Verificar</button><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="rechazarVerificacion('${x.id}', this)">Rechazar</button>${historialIcono}`
           : x.verificacion_rechazada ? `<span class="status-pill status-rechazada" title="${esc(x.verificacion_motivo_rechazo||'')}">Rechazada</span>${historialIcono}`
           : `<span class="status-pill status-bloqueado">Sin solicitar</span>`;
       }
       return `<tr><td>${esc(x.nombre)}</td><td>${x.tipo}</td><td>${esc(x.correo)}</td>
       <td><span class="status-pill status-${x.estado}">${x.estado}</span></td>
       <td>${verifCell}</td>
-      <td><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="toggleEstadoUsuario('${x.id}')">${x.estado==='activo'?'Bloquear':'Activar'}</button></td></tr>`;
+      <td><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="toggleEstadoUsuario('${x.id}', this)">${x.estado==='activo'?'Bloquear':'Activar'}</button></td></tr>`;
     }).join('')}
     </tbody></table>`;
 
@@ -2111,17 +2189,19 @@ async function renderAdmin(){
       const trabajador = cita && trabajadorPorId.get(cita.trabajadorId);
       const citaCell = cita ? `${esc(trabajador?trabajador.nombre:'—')}<br><span class="mono" style="font-size:11px;color:var(--ink-soft);">${esc(cita.fecha)} · ${esc(cita.hora)}</span>` : '—';
       return `<tr><td>${esc(r.deNombre)}</td><td>${citaCell}</td><td>${esc(r.motivo)}</td><td><span class="status-pill status-${r.estado}">${r.estado}</span></td>
-      <td>${r.estado==='abierto'?`<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="resolverReporte('${r.id}')">Marcar resuelto</button>`:'—'}</td></tr>`;
+      <td>${r.estado==='abierto'?`<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="resolverReporte('${r.id}', this)">Marcar resuelto</button>`:'—'}</td></tr>`;
     }).join('')}
     </tbody></table>` : `<div class="empty-note">No hay reportes registrados.</div>`;
 }
-async function toggleEstadoUsuario(id){
+async function toggleEstadoUsuario(id, btn){
   const u = await obtenerPerfil(id);
   if(!u) return;
-  const nuevoEstado = u.estado==='activo' ? 'bloqueado' : 'activo';
-  await sb.from('profiles').update({ estado: nuevoEstado }).eq('id', id);
-  invalidarPerfil(id);
-  renderAdmin();
+  await conCargando(btn, 'Guardando...', async () => {
+    const nuevoEstado = u.estado==='activo' ? 'bloqueado' : 'activo';
+    await sb.from('profiles').update({ estado: nuevoEstado }).eq('id', id);
+    invalidarPerfil(id);
+    renderAdmin();
+  });
 }
 async function verDocumentoVerificacion(path){
   // Abrir la ventana antes de esperar la URL firmada, para que el navegador no la bloquee.
@@ -2130,44 +2210,50 @@ async function verDocumentoVerificacion(path){
   if(error || !data){ win.close(); mostrarToast('No se pudo abrir el documento.', 'err'); return; }
   win.location.href = data.signedUrl;
 }
-async function verificarTrabajador(id){
+async function verificarTrabajador(id, btn){
   const u = await obtenerPerfil(id);
   if(!u) return;
-  const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'aprobada' }];
-  await sb.from('profiles').update({
-    verificado: true,
-    verificacion_pendiente: false,
-    verificacion_rechazada: false,
-    verificacion_motivo_rechazo: null,
-    verificacion_historial: historial,
-  }).eq('id', id);
-  invalidarPerfil(id);
-  addNotificacion(u.id, 'Tu perfil fue verificado por el administrador. Ya se muestra el distintivo ✓ Verificado.');
-  mostrarToast(`${u.nombre.split(' ')[0]} fue verificado.`, 'ok');
-  renderAdmin();
+  await conCargando(btn, 'Verificando...', async () => {
+    const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'aprobada' }];
+    await sb.from('profiles').update({
+      verificado: true,
+      verificacion_pendiente: false,
+      verificacion_rechazada: false,
+      verificacion_motivo_rechazo: null,
+      verificacion_historial: historial,
+    }).eq('id', id);
+    invalidarPerfil(id);
+    addNotificacion(u.id, 'Tu perfil fue verificado por el administrador. Ya se muestra el distintivo ✓ Verificado.');
+    mostrarToast(`${u.nombre.split(' ')[0]} fue verificado.`, 'ok');
+    renderAdmin();
+  });
 }
-async function rechazarVerificacion(id){
+async function rechazarVerificacion(id, btn){
   const u = await obtenerPerfil(id);
   if(!u) return;
   const motivo = prompt('¿Por qué se rechaza la verificación? El trabajador va a ver este motivo.');
   if(motivo === null) return; // canceló el prompt
   if(!motivo.trim()){ mostrarToast('Escribí un motivo para rechazar.', 'err'); return; }
-  const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'rechazada', motivo: motivo.trim() }];
-  await sb.from('profiles').update({
-    verificado: false,
-    verificacion_pendiente: false,
-    verificacion_rechazada: true,
-    verificacion_motivo_rechazo: motivo.trim(),
-    verificacion_historial: historial,
-  }).eq('id', id);
-  invalidarPerfil(id);
-  addNotificacion(u.id, `Tu verificación fue rechazada: ${motivo.trim()}. Podés corregir el documento y volver a solicitarla desde tu perfil.`);
-  mostrarToast(`Verificación de ${u.nombre.split(' ')[0]} rechazada.`, 'ok');
-  renderAdmin();
+  await conCargando(btn, 'Rechazando...', async () => {
+    const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'rechazada', motivo: motivo.trim() }];
+    await sb.from('profiles').update({
+      verificado: false,
+      verificacion_pendiente: false,
+      verificacion_rechazada: true,
+      verificacion_motivo_rechazo: motivo.trim(),
+      verificacion_historial: historial,
+    }).eq('id', id);
+    invalidarPerfil(id);
+    addNotificacion(u.id, `Tu verificación fue rechazada: ${motivo.trim()}. Podés corregir el documento y volver a solicitarla desde tu perfil.`);
+    mostrarToast(`Verificación de ${u.nombre.split(' ')[0]} rechazada.`, 'ok');
+    renderAdmin();
+  });
 }
-async function resolverReporte(id){
-  await sb.from('reportes').update({ estado: 'resuelto' }).eq('id', id);
-  renderAdmin();
+async function resolverReporte(id, btn){
+  await conCargando(btn, 'Guardando...', async () => {
+    await sb.from('reportes').update({ estado: 'resuelto' }).eq('id', id);
+    renderAdmin();
+  });
 }
 
 async function renderPQRAdmin(){
@@ -2184,21 +2270,23 @@ async function renderPQRAdmin(){
       const persona = usuarioPorId.get(p.user_id);
       return `<tr><td>${persona?esc(persona.nombre):'—'}</td><td>${p.tipo}</td><td>${esc(p.asunto)}</td>
       <td><span class="status-pill status-${p.estado==='respondido'?'activo':'pendiente'}">${p.estado}</span></td>
-      <td>${p.estado!=='respondido' ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="responderPQR('${p.id}')">Responder</button>` : '—'}</td></tr>`;
+      <td>${p.estado!=='respondido' ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="responderPQR('${p.id}', this)">Responder</button>` : '—'}</td></tr>`;
     }).join('')}
     </tbody></table>` : `<div class="empty-note">No hay peticiones, quejas ni reclamos.</div>`;
 }
-async function responderPQR(id){
+async function responderPQR(id, btn){
   const respuesta = prompt('Escribí la respuesta para el usuario:');
   if(respuesta === null) return; // canceló el prompt
   if(!respuesta.trim()){ mostrarToast('Escribí una respuesta.', 'err'); return; }
-  const { data, error } = await sb.from('pqr')
-    .update({ estado: 'respondido', respuesta: respuesta.trim(), respuesta_fecha: new Date().toISOString() })
-    .eq('id', id).select('user_id, asunto').single();
-  if(error){ mostrarToast('No se pudo enviar la respuesta.', 'err'); return; }
-  if(data) addNotificacion(data.user_id, `Respondimos tu solicitud "${data.asunto}". Revisala en PQR.`);
-  mostrarToast('Respuesta enviada.', 'ok');
-  renderPQRAdmin();
+  await conCargando(btn, 'Enviando...', async () => {
+    const { data, error } = await sb.from('pqr')
+      .update({ estado: 'respondido', respuesta: respuesta.trim(), respuesta_fecha: new Date().toISOString() })
+      .eq('id', id).select('user_id, asunto').single();
+    if(error){ mostrarToast('No se pudo enviar la respuesta.', 'err'); return; }
+    if(data) addNotificacion(data.user_id, `Respondimos tu solicitud "${data.asunto}". Revisala en PQR.`);
+    mostrarToast('Respuesta enviada.', 'ok');
+    renderPQRAdmin();
+  });
 }
 
 async function renderEstadisticas(){
