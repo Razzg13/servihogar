@@ -1,13 +1,17 @@
-const CACHE_NAME = 'hogandia-v1';
+const CACHE_NAME = 'hogandia-v2';
 
 // HTML/CSS/JS cambian con cada deploy y no tienen nombre versionado (no hay build
 // step), así que van con red-primero: si hay conexión, siempre se sirve la versión
 // más nueva; el caché es solo el respaldo para cuando no hay red.
+// (v2: faltaba js/logica.js en esta lista — quedaba cacheado "para siempre" con la
+// estrategia cache-first de más abajo, así que un visitante que ya lo tenía cacheado
+// seguía recibiendo una versión vieja del archivo aunque hubiera deploys nuevos.)
 const NETWORK_FIRST_ASSETS = [
   './',
   './index.html',
   './css/styles.css',
   './js/app.js',
+  './js/logica.js',
   './js/supabase-config.js',
   './manifest.json',
 ];

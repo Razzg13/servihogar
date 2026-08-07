@@ -578,26 +578,30 @@ async function toggleNotifPanel(){
 async function renderHome(){
   const workersBox = document.getElementById('home-workers');
   if(workersBox) workersBox.innerHTML = `<div class="empty-note">Cargando trabajadores destacados...</div>`;
-  const [trabajadores, { count: totalCitas }] = await Promise.all([
-    cargarTrabajadores(),
-    sb.from('citas').select('id', { count: 'exact', head: true })
-  ]);
-  document.getElementById('stat-workers').textContent = trabajadores.length;
-  document.getElementById('stat-jobs').textContent = totalCitas || 0;
-  const todasResenas = trabajadores.flatMap(w=>w.resenas||[]);
-  const ratingProm = todasResenas.length
-    ? (todasResenas.reduce((a,r)=>a+r.estrellas,0)/todasResenas.length).toFixed(1)
-    : '—';
-  document.getElementById('stat-rating').textContent = ratingProm;
-  document.getElementById('hf-rating-val').textContent = ratingProm;
+  try {
+    const [trabajadores, { count: totalCitas }] = await Promise.all([
+      cargarTrabajadores(),
+      sb.from('citas').select('id', { count: 'exact', head: true })
+    ]);
+    document.getElementById('stat-workers').textContent = trabajadores.length;
+    document.getElementById('stat-jobs').textContent = totalCitas || 0;
+    const todasResenas = trabajadores.flatMap(w=>w.resenas||[]);
+    const ratingProm = todasResenas.length
+      ? (todasResenas.reduce((a,r)=>a+r.estrellas,0)/todasResenas.length).toFixed(1)
+      : '—';
+    document.getElementById('stat-rating').textContent = ratingProm;
+    document.getElementById('hf-rating-val').textContent = ratingProm;
 
-  document.getElementById('home-cats').innerHTML = CATS.map(c=>
-    `<div class="cat-card" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></div>`
-  ).join('');
+    document.getElementById('home-cats').innerHTML = CATS.map(c=>
+      `<div class="cat-card" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></div>`
+    ).join('');
 
-  const destacados = trabajadores.filter(u=>u.estado==='activo')
-    .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,3);
-  document.getElementById('home-workers').innerHTML = destacados.map(workerCardHTML).join('');
+    const destacados = trabajadores.filter(u=>u.estado==='activo')
+      .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,3);
+    document.getElementById('home-workers').innerHTML = destacados.map(workerCardHTML).join('');
+  } catch(e){
+    if(workersBox) workersBox.innerHTML = `<div class="empty-note">No se pudo cargar. <button type="button" class="link-btn" onclick="renderHome()">Reintentar</button></div>`;
+  }
 }
 
 function workerCardHTML(w, opts={}){
