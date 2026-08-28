@@ -640,24 +640,30 @@ function workerCardHTML(w, opts={}){
   const esFav = u && u.tipo==='cliente' && (u.favoritos||[]).includes(w.id);
   const distancia = state.miUbicacion ? distanciaKm(state.miUbicacion, coordsForWorker(w)) : null;
   const insignias = insigniasTrabajador(w.resenas).map(i=>`<span class="insignia-badge" title="${esc(i.texto)}">${i.icono} ${esc(i.texto)}</span>`).join('');
+  const n = (w.resenas || []).length;
   const compararCheckbox = opts.comparador ? `<label class="compare-check" onclick="event.stopPropagation();">
     <input type="checkbox" ${state.compararIds.includes(w.id)?'checked':''} onchange="toggleComparar('${w.id}', this.checked)"> Comparar</label>` : '';
-  return `<div class="worker-card ticket" onclick="verPerfil('${w.id}')">
-    <div class="worker-top">
+  const pills = [
+    w.disponible_ahora ? `<span class="rating-pill disp-ahora">${ICONO_DISPONIBLE}Disponible ahora</span>` : '',
+    distancia!==null ? `<span class="rating-pill dist">${ICONO_UBICACION}${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</span>` : '',
+  ].filter(Boolean).join('');
+  return `<div class="pro-card pro-card--list" onclick="verPerfil('${w.id}')">
+    <div class="pro-photo">
       ${avatarHTML(w.nombre, w.foto_url)}
-      <div style="flex:1;"><div class="name">${esc(w.nombre)} ${w.verificado?'<span class=\"verif-badge\" title=\"Verificado\">✓</span>':''}${insignias}</div><div class="role">${esc(w.categoria)} · ${esc(w.zona)}</div></div>
       ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
     </div>
-    <div class="perf"></div>
-    <div class="worker-meta">
-      <div style="display:flex; gap:6px; flex-wrap:wrap;">
-        <div class="rating-pill">${rating ? '★ '+rating : 'Sin calificar'}</div>
-        ${w.disponible_ahora ? `<div class="rating-pill disp-ahora">${ICONO_DISPONIBLE}Disponible ahora</div>` : ''}
-        ${distancia!==null ? `<div class="rating-pill dist">${ICONO_UBICACION}${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</div>` : ''}
+    <div class="pro-body">
+      <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Verificado">✓</span>':''}</div>
+      <div class="pro-cat">${esc(w.categoria || '')}${w.zona?` · ${esc(w.zona)}`:''}</div>
+      <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
+      ${(insignias || pills) ? `<div class="pro-pills">${insignias}${pills}</div>` : ''}
+      <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
+      <div class="pro-actions">
+        <button class="btn btn-outline" onclick="event.stopPropagation(); verPerfil('${w.id}')">Ver perfil</button>
+        <button class="btn btn-primary" onclick="event.stopPropagation(); irAAgendar('${w.id}')">Agendar</button>
       </div>
-      <div class="tarifa">Desde ${fmtCOP(w.tarifa)}</div>
+      ${compararCheckbox}
     </div>
-    ${compararCheckbox}
   </div>`;
 }
 async function toggleFavorito(workerId){
