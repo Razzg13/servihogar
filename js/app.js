@@ -441,16 +441,33 @@ function normalizarCita(c){
   if(!c) return null;
   return { ...c, clienteId: c.cliente_id, trabajadorId: c.trabajador_id };
 }
-const AVATAR_PALETTE = ['#3F7D58','#C75F1D','#1C2B39','#5B6EAE','#A6433A','#2F8F94'];
-function avatarHTML(nombre, fotoUrl){
-  if(fotoUrl){
-    return `<div class="avatar" style="padding:0;"><img src="${esc(fotoUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;"></div>`;
-  }
+// Fondos suaves (tinte claro + iniciales en un tono más oscuro de la misma familia)
+const AVATAR_PALETTE = [
+  ['#EFE3D3','#B85F1E'], ['#E4EDE6','#3F7D58'], ['#E1E7EE','#3A4F60'],
+  ['#E9E5F0','#5B5FA0'], ['#F0E2E0','#A6433A'], ['#DFECEC','#2A7E82'],
+];
+function iniciales(nombre){
+  return (nombre || '').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase() || '?';
+}
+function avatarFallbackHTML(nombre){
   const n = nombre || '';
-  const iniciales = n.trim().split(/\s+/).slice(0,2).map(p=>p[0]).join('').toUpperCase();
   let hash = 0;
   for(let i=0;i<n.length;i++) hash = (hash*31 + n.charCodeAt(i)) % AVATAR_PALETTE.length;
-  return `<div class="avatar" style="background:${AVATAR_PALETTE[hash]};">${esc(iniciales)}</div>`;
+  const [bg, fg] = AVATAR_PALETTE[hash] || AVATAR_PALETTE[0];
+  return `<div class="avatar avatar--initials" style="background:${bg};color:${fg};">${esc(iniciales(n))}</div>`;
+}
+// Se llama desde el onerror del <img>: si la foto no carga, la reemplaza por iniciales.
+function avatarImgError(img){
+  const cont = img.closest('.avatar');
+  if(cont) cont.outerHTML = avatarFallbackHTML(img.getAttribute('data-nombre') || '');
+}
+function avatarHTML(nombre, fotoUrl){
+  if(fotoUrl){
+    return `<div class="avatar" style="padding:0;"><img src="${esc(fotoUrl)}" alt="" loading="lazy" data-nombre="${esc(nombre||'')}"
+      style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;"
+      onerror="avatarImgError(this)"></div>`;
+  }
+  return avatarFallbackHTML(nombre);
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
