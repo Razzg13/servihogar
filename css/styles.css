@@ -17,7 +17,6 @@
     --hh-house:rgba(232,117,44,0.20);
     --steps-bg:linear-gradient(120deg,#15242A 0%,#141E27 100%);
   }
-  [data-theme="dark"] body{background-image:linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);}
   [data-theme="dark"] .card, [data-theme="dark"] .svc-card, [data-theme="dark"] .pro-card,
   [data-theme="dark"] table, [data-theme="dark"] .cal, [data-theme="dark"] .form-card,
   [data-theme="dark"] .search-bar input, [data-theme="dark"] .field input,
@@ -35,9 +34,7 @@
     .view.active, .svc-card, .pro-card{animation:none !important; transition:none !important;}
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  body{font-family:'IBM Plex Sans',sans-serif; background:var(--paper); color:var(--ink); min-height:100vh;
-       background-image:linear-gradient(rgba(28,43,57,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(28,43,57,0.025) 1px, transparent 1px);
-       background-size:26px 26px; line-height:1.45;}
+  body{font-family:'IBM Plex Sans',sans-serif; background:var(--paper); color:var(--ink); min-height:100vh; line-height:1.45;}
   h1,h2,h3{font-family:'Space Grotesk',sans-serif; color:var(--navy); letter-spacing:0;}
 
   /* ticket / work-order motif used across cards */
