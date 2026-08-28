@@ -608,8 +608,8 @@ async function renderHome(){
   if(catsBox){
     const iconMas = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`;
     catsBox.innerHTML = CATS.map(c=>
-      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></button>`
-    ).join('') + `<button class="svc-card" onclick="nav('buscar')">${iconMas}<span>Más</span></button>`;
+      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${c.n}')"><span class="ic-wrap">${iconSVG(c.n)}</span><span>${c.n}</span></button>`
+    ).join('') + `<button class="svc-card" onclick="nav('buscar')"><span class="ic-wrap">${iconMas}</span><span>Más</span></button>`;
   }
 
   try {
