@@ -1,12 +1,11 @@
-const CACHE_NAME = 'hogandia-v2';
+const CACHE_NAME = 'hogandia-v3';
 
-// HTML/CSS/JS cambian con cada deploy y no tienen nombre versionado (no hay build
-// step), así que van con red-primero: si hay conexión, siempre se sirve la versión
-// más nueva; el caché es solo el respaldo para cuando no hay red.
-// (v2: faltaba js/logica.js en esta lista — quedaba cacheado "para siempre" con la
-// estrategia cache-first de más abajo, así que un visitante que ya lo tenía cacheado
-// seguía recibiendo una versión vieja del archivo aunque hubiera deploys nuevos.)
-const NETWORK_FIRST_ASSETS = [
+// Todo lo del propio origen (HTML/CSS/JS/imágenes) va con RED-PRIMERO: si hay
+// conexión siempre se sirve la versión más nueva del deploy; el caché es solo el
+// respaldo para cuando no hay red.
+// (v3: antes las imágenes iban cache-first y quedaban cacheadas "para siempre" —
+// cambiar img/hero.jpg no se veía nunca. Mismo problema que tuvo js/logica.js en v2.)
+const PRECACHE_ASSETS = [
   './',
   './index.html',
   './css/styles.css',
@@ -14,17 +13,18 @@ const NETWORK_FIRST_ASSETS = [
   './js/logica.js',
   './js/supabase-config.js',
   './manifest.json',
+  './img/icon-192.png',
 ];
 
-// Imágenes/iconos casi no cambian: sirven directo del caché sin ir a red primero.
+// Sólo estos se sirven directo del caché sin ir a red (no cambian nunca por nombre).
 const CACHE_FIRST_ASSETS = [
   './img/icon.png',
   './img/icon-192.png',
   './img/icon-512.png',
-  './img/logo-header.png',
+  './img/icon-maskable-512.png',
 ];
 
-const STATIC_ASSETS = [...NETWORK_FIRST_ASSETS, ...CACHE_FIRST_ASSETS];
+const STATIC_ASSETS = PRECACHE_ASSETS;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -53,34 +53,32 @@ self.addEventListener('fetch', (event) => {
 
   const path = './' + url.pathname.replace(/^\//, '');
   const esNavegacion = request.mode === 'navigate';
-  const esNetworkFirst = esNavegacion || NETWORK_FIRST_ASSETS.includes(path);
 
-  if (esNetworkFirst) {
+  // Íconos fijos: cache-primero (nunca cambian de contenido).
+  if (CACHE_FIRST_ASSETS.includes(path)) {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || (esNavegacion ? caches.match('./index.html') : undefined)))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
+      caches.match(request).then((cached) => cached || fetch(request).then((response) => {
         if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return response;
-      });
-    })
+      }))
+    );
+    return;
+  }
+
+  // Todo lo demás del origen: red-primero, caché como respaldo offline.
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request).then((cached) => cached || (esNavegacion ? caches.match('./index.html') : undefined)))
   );
 });
 
