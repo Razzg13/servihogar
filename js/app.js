@@ -1404,35 +1404,44 @@ async function renderMisCitas(){
 
   const trabajadores = await obtenerPerfiles(propias.map(c=>c.trabajadorId));
   const porId = new Map(trabajadores.map(w=>[w && w.id, w]));
-  box.innerHTML = `<button type="button" class="btn btn-outline" style="margin-bottom:14px;" onclick="exportarCitasCSV('cliente')">⬇ Exportar historial (CSV)</button>
-  <table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Pago</th><th>Acciones</th></tr></thead><tbody>
+  box.innerHTML = `<div class="cita-toolbar"><button type="button" class="btn btn-outline" onclick="exportarCitasCSV('cliente')">⬇ Exportar historial (CSV)</button></div>
+  <div class="cita-list">
     ${propias.map(c=>{
       const w = porId.get(c.trabajadorId);
       let accion = '';
-      if(c.estado==='pendiente') accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="cancelarCita('${c.id}', this)">Cancelar</button>`;
-      if(c.estado==='aceptada') accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="marcarCompletada('${c.id}', this)">Marcar completado</button>`;
-      if(c.estado==='completada' && !c.calificacion) accion = `<button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificar('${c.id}')">Calificar</button>`;
-      if(c.calificacion) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion.estrellas)} calificado</span>`;
-      if(c.estado==='pendiente' || c.estado==='aceptada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="reagendarCita('${c.id}')">Reagendar</button>`;
-      if(c.estado==='completada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="irAAgendar('${c.trabajadorId}')">Agendar de nuevo</button>`;
-      if(c.estado==='aceptada') accion += ` <button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="descargarIcs('${c.id}')">📅 Agregar a calendario</button>`;
+      if(c.estado==='pendiente') accion = `<button class="btn btn-outline" onclick="cancelarCita('${c.id}', this)">Cancelar</button>`;
+      if(c.estado==='aceptada') accion = `<button class="btn btn-outline" onclick="marcarCompletada('${c.id}', this)">Marcar completado</button>`;
+      if(c.estado==='completada' && !c.calificacion) accion = `<button class="btn btn-primary" onclick="abrirCalificar('${c.id}')">Calificar</button>`;
+      if(c.calificacion) accion = `<span class="cc-tag">${'★'.repeat(c.calificacion.estrellas)} calificado</span>`;
+      if(c.estado==='pendiente' || c.estado==='aceptada') accion += ` <button class="btn btn-outline" onclick="reagendarCita('${c.id}')">Reagendar</button>`;
+      if(c.estado==='completada') accion += ` <button class="btn btn-outline" onclick="irAAgendar('${c.trabajadorId}')">Agendar de nuevo</button>`;
+      if(c.estado==='aceptada') accion += ` <button class="btn btn-outline" onclick="descargarIcs('${c.id}')">📅 Calendario</button>`;
       let pagoPill;
       if(c.pago==='pagado') pagoPill = `<span class="status-pill status-activo">pagado</span>`;
       else if(c.pago==='declarado') pagoPill = `<span class="status-pill status-pendiente">esperando confirmación</span>`;
-      else if(c.estado==='aceptada' || c.estado==='completada') pagoPill = `<button class="btn btn-outline" style="font-size:11px;padding:5px 9px;" onclick="abrirDeclararPago('${c.id}')">Declarar pago</button>`;
-      else pagoPill = `<span class="status-pill status-pendiente">pendiente</span>`;
-      return `<tr>
-        <td>${w?esc(w.nombre):'—'}${c.recurrente?' <span title="Servicio recurrente">🔁</span>':''}</td><td>${esc(c.fecha)}</td><td>${esc(c.hora)}</td>
-        <td><span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${c.estado}</span>${c.estado==='aceptada' && c.en_camino ? `<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span> <button type="button" class="btn btn-outline" style="font-size:10.5px;padding:3px 7px;margin-top:4px;" onclick="verUbicacionEnCamino('${c.id}')">Ver en mapa</button>` : ''}</td>
-        <td>${pagoPill}</td>
-        <td><div class="row-actions">${accion}
-          <button onclick="abrirChat('${c.id}')">Chat</button>
-          <button onclick="abrirComprobante('${c.id}')">Comprobante</button>
-          <button class="rej" onclick="abrirReportar('${c.id}')">Reportar</button>
-        </div></td>
-      </tr>`;
+      else if(c.estado==='aceptada' || c.estado==='completada') pagoPill = `<button class="btn btn-outline btn-xs" onclick="abrirDeclararPago('${c.id}')">Declarar pago</button>`;
+      else pagoPill = `<span class="status-pill status-pendiente">pago pendiente</span>`;
+      return `<div class="cita-card">
+        <div class="cc-head">
+          ${w ? avatarHTML(w.nombre, w.foto_url) : '<div class="avatar avatar--initials">—</div>'}
+          <div class="cc-main">
+            <div class="cc-name">${w?esc(w.nombre):'Trabajador'}${c.recurrente?' <span title="Servicio recurrente">🔁</span>':''}</div>
+            <div class="cc-when"><span>📅 ${esc(c.fecha)}</span><span>🕑 ${esc(c.hora)}</span></div>
+          </div>
+          <span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${c.estado}</span>
+        </div>
+        <div class="cc-pills">
+          ${pagoPill}
+          ${c.estado==='aceptada' && c.en_camino ? `<span class="rating-pill disp-ahora">🚗 En camino</span> <button type="button" class="btn btn-outline btn-xs" onclick="verUbicacionEnCamino('${c.id}')">Ver en mapa</button>` : ''}
+        </div>
+        <div class="cc-actions">${accion}
+          <button class="btn btn-outline" onclick="abrirChat('${c.id}')">💬 Chat</button>
+          <button class="btn btn-outline" onclick="abrirComprobante('${c.id}')">Comprobante</button>
+          <button class="btn btn-outline cc-danger" onclick="abrirReportar('${c.id}')">Reportar</button>
+        </div>
+      </div>`;
     }).join('')}
-  </tbody></table>
+  </div>
   <div id="encamino-mapa-panel" class="hidden" style="margin-top:20px;"></div>
   <div id="calificar-panel" style="margin-top:20px;"></div>
   <div id="pagar-panel" style="margin-top:20px;"></div>
@@ -1973,35 +1982,40 @@ async function renderTrabajo(){
     }
   });
   document.getElementById('work-solicitudes').innerHTML = propias.length ? `
-    <button type="button" class="btn btn-outline" style="margin-bottom:14px;" onclick="exportarCitasCSV('trabajador')">⬇ Exportar historial (CSV)</button>
-    <table><thead><tr><th>Cliente</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Pago</th><th>Acciones</th></tr></thead><tbody>
+    <div class="cita-toolbar"><button type="button" class="btn btn-outline" onclick="exportarCitasCSV('trabajador')">⬇ Exportar historial (CSV)</button></div>
+    <div class="cita-list">
     ${propias.map(c=>{
       const cli = clientePorId.get(c.clienteId);
       const califCli = misCalifClientes.get(c.clienteId);
-      const nombreCliente = `${cli?esc(cli.nombre):'—'}${califCli ? ` <span class="mono" style="font-size:10.5px;color:var(--ink-soft);" title="Tu calificación a este cliente">★${(califCli.suma/califCli.n).toFixed(1)}</span>` : ''}`;
-      const notasIcono = (c.notas_cliente || c.direccion_referencia)
-        ? ` <span title="${esc([c.direccion_referencia?'Dirección: '+c.direccion_referencia:'', c.notas_cliente?'Notas: '+c.notas_cliente:''].filter(Boolean).join(' · '))}">📝</span>` : '';
+      const estrellaCli = califCli ? ` <span class="cc-tag" title="Tu calificación a este cliente">★${(califCli.suma/califCli.n).toFixed(1)}</span>` : '';
+      const notaTxt = [c.direccion_referencia?'Dirección: '+c.direccion_referencia:'', c.notas_cliente?'Notas: '+c.notas_cliente:''].filter(Boolean).join(' · ');
       let accion = '';
-      if(c.estado==='pendiente') accion = `<div class="row-actions"><button class="acc" onclick="responderCita('${c.id}','aceptada', this)">Aceptar</button><button class="rej" onclick="responderCita('${c.id}','rechazada', this)">Rechazar</button></div>`;
-      if(c.estado==='aceptada') accion = `<button class="rej" onclick="cancelarCitaTrabajador('${c.id}', this)">Cancelar</button> <button onclick="descargarIcs('${c.id}')">📅 Calendario</button>${!c.en_camino ? ` <button onclick="avisarEnCamino('${c.id}', this)">🚗 Voy en camino</button>` : ''}`;
-      if(c.estado==='completada' && !c.calificacion_trabajador) accion = `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="abrirCalificarCliente('${c.id}')">Calificar cliente</button>`;
-      if(c.calificacion_trabajador) accion = `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${'★'.repeat(c.calificacion_trabajador.estrellas)} calificado</span>`;
+      if(c.estado==='pendiente') accion = `<button class="btn btn-primary" onclick="responderCita('${c.id}','aceptada', this)">Aceptar</button><button class="btn btn-outline cc-danger" onclick="responderCita('${c.id}','rechazada', this)">Rechazar</button>`;
+      if(c.estado==='aceptada') accion = `<button class="btn btn-outline cc-danger" onclick="cancelarCitaTrabajador('${c.id}', this)">Cancelar</button> <button class="btn btn-outline" onclick="descargarIcs('${c.id}')">📅 Calendario</button>${!c.en_camino ? ` <button class="btn btn-outline" onclick="avisarEnCamino('${c.id}', this)">🚗 Voy en camino</button>` : ''}`;
+      if(c.estado==='completada' && !c.calificacion_trabajador) accion = `<button class="btn btn-outline" onclick="abrirCalificarCliente('${c.id}')">Calificar cliente</button>`;
+      if(c.calificacion_trabajador) accion = `<span class="cc-tag">${'★'.repeat(c.calificacion_trabajador.estrellas)} calificado</span>`;
       let pagoCell;
       if(c.pago==='pagado') pagoCell = `<span class="status-pill status-activo">pagado</span>`;
-      else if(c.pago==='declarado') pagoCell = `<div class="row-actions">
-          <button onclick="verComprobantePago('${esc(c.comprobante_pago_path)}')">Ver comprobante</button>
-          <button class="acc" onclick="confirmarPagoRecibido('${c.id}', this)">Confirmar</button>
-          <button class="rej" onclick="rechazarComprobantePago('${c.id}', this)">Rechazar</button>
-        </div>`;
-      else pagoCell = `<span class="status-pill status-pendiente">${c.pago||'pendiente'}</span>`;
-      return `<tr><td>${nombreCliente}</td><td>${esc(c.fecha)}${notasIcono}</td><td>${esc(c.hora)}</td>
-        <td><span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${c.estado}</span>${c.en_camino?'<br><span class="rating-pill disp-ahora" style="margin-top:4px;">🚗 En camino</span>':''}</td>
-        <td>${pagoCell}</td>
-        <td><div class="row-actions">${accion}<button onclick="abrirChat('${c.id}')">Chat</button></div></td></tr>`;
+      else if(c.pago==='declarado') pagoCell = `<button class="btn btn-outline btn-xs" onclick="verComprobantePago('${esc(c.comprobante_pago_path)}')">Ver comprobante</button>
+          <button class="btn btn-primary btn-xs" onclick="confirmarPagoRecibido('${c.id}', this)">Confirmar pago</button>
+          <button class="btn btn-outline btn-xs cc-danger" onclick="rechazarComprobantePago('${c.id}', this)">Rechazar</button>`;
+      else pagoCell = `<span class="status-pill status-pendiente">pago ${c.pago||'pendiente'}</span>`;
+      return `<div class="cita-card">
+        <div class="cc-head">
+          ${cli ? avatarHTML(cli.nombre, cli.foto_url) : '<div class="avatar avatar--initials">—</div>'}
+          <div class="cc-main">
+            <div class="cc-name">${cli?esc(cli.nombre):'Cliente'}${estrellaCli}</div>
+            <div class="cc-when"><span>📅 ${esc(c.fecha)}</span><span>🕑 ${esc(c.hora)}</span>${notaTxt?`<span title="${esc(notaTxt)}">📝 con notas</span>`:''}</div>
+          </div>
+          <span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${c.estado}</span>
+        </div>
+        <div class="cc-pills">${pagoCell}${c.en_camino?' <span class="rating-pill disp-ahora">🚗 En camino</span>':''}</div>
+        <div class="cc-actions">${accion}<button class="btn btn-outline" onclick="abrirChat('${c.id}')">💬 Chat</button></div>
+      </div>`;
     }).join('')}
-    </tbody></table>
+    </div>
     <div id="calificar-cliente-panel" style="margin-top:20px;"></div>
-    <div id="chat-panel-work" style="margin-top:20px;"></div>` : `<div class="empty-note">Todavía no tienes solicitudes de servicio.</div>`;
+    <div id="chat-panel-work" style="margin-top:20px;"></div>` : `<div class="empty-note">Todavía no tenés solicitudes de servicio.</div>`;
 
   const verifBadge = u.verificado ? `<span class="verif-badge">✓ Verificado</span>`
     : u.verificacionPendiente ? `<span class="status-pill status-pendiente">Verificación pendiente</span>`

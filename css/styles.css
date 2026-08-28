@@ -243,9 +243,28 @@
   .status-bloqueado{background:#F3E3E0; color:var(--red);}
   .status-resuelto{background:#E4E9F0; color:var(--navy);}
   .row-actions{display:flex; gap:6px; flex-wrap:wrap;}
-  .row-actions button{font-size:11.5px; font-weight:600; padding:6px 10px; border-radius:7px; border:1.5px solid var(--line); background:#fff;}
+  .row-actions button{font-size:11.5px; font-weight:600; padding:6px 10px; border-radius:7px; border:1.5px solid var(--line); background:var(--card); color:var(--navy);}
   .row-actions button.acc{border-color:var(--green); color:var(--green);}
   .row-actions button.rej{border-color:var(--red); color:var(--red);}
+
+  /* CITAS — lista de tarjetas (Mis citas / panel trabajador) */
+  .cita-toolbar{display:flex; justify-content:flex-end; margin-bottom:16px;}
+  .cita-list{display:flex; flex-direction:column; gap:14px;}
+  .cita-card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 18px; box-shadow:var(--shadow);}
+  .cita-card .cc-head{display:flex; align-items:center; gap:13px;}
+  .cita-card .avatar{width:46px; height:46px; border-radius:12px; font-size:15px;}
+  .cita-card .cc-main{flex:1; min-width:0;}
+  .cita-card .cc-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:var(--navy);}
+  .cita-card .cc-when{display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft); margin-top:3px;}
+  .cita-card .cc-head .status-pill{flex-shrink:0;}
+  .cita-card .cc-pills{display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-top:12px;}
+  .cita-card .cc-pills:empty{display:none;}
+  .cita-card .cc-actions{display:flex; flex-wrap:wrap; gap:7px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); align-items:center;}
+  .cita-card .cc-actions .btn{font-size:12px; padding:8px 12px; border-radius:9px;}
+  .cita-card .cc-actions .cc-danger{color:var(--red); border-color:var(--line);}
+  .cita-card .cc-actions .cc-danger:hover{border-color:var(--red);}
+  .cita-card .cc-tag{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--orange-deep);}
+  .btn-xs{font-size:11px !important; padding:5px 9px !important;}
 
   .admin-summary{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px;}
   .admin-stat{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:var(--shadow);}
