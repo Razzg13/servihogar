@@ -138,7 +138,19 @@
   .disp-hours{display:flex; flex-wrap:wrap; gap:6px;}
   .results-summary{display:flex; flex-wrap:wrap; gap:8px; margin:-8px 0 18px;}
   .results-summary span{background:var(--card); border:1px solid var(--line); border-radius:20px; color:var(--ink-soft); font-family:'IBM Plex Mono'; font-size:11px; font-weight:600; padding:5px 9px;}
-  .empty-note{color:var(--ink-soft); font-size:13.5px; padding:30px 0; text-align:center;}
+  .empty-note{color:var(--ink-soft); font-size:13.5px; padding:38px 20px; text-align:center; line-height:1.6;}
+
+  /* skeleton de carga */
+  .sk-grid{display:grid; gap:16px;}
+  .sk-card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:15px; display:flex; flex-direction:column; gap:10px;}
+  .sk-card .sk-top{display:flex; gap:13px;}
+  .sk-line{background:var(--line); border-radius:6px; height:11px; position:relative; overflow:hidden;}
+  .sk-box{background:var(--line); border-radius:13px; width:66px; height:66px; flex-shrink:0; position:relative; overflow:hidden;}
+  .sk-line::after, .sk-box::after{content:""; position:absolute; inset:0; transform:translateX(-100%);
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent); animation:sk 1.3s ease-in-out infinite;}
+  [data-theme="dark"] .sk-line::after, [data-theme="dark"] .sk-box::after{background:linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent);}
+  @keyframes sk{100%{transform:translateX(100%);}}
+  @media (prefers-reduced-motion: reduce){ .sk-line::after, .sk-box::after{animation:none;} }
 
   /* MAPAS */
   .map-box{height:230px; border-radius:14px; overflow:hidden; border:1px solid var(--line); position:relative; z-index:1;}

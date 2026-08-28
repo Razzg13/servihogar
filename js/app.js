@@ -589,9 +589,19 @@ async function toggleNotifPanel(){
 }
 
 /* ---------------- HOME ---------------- */
+// Placeholder animado mientras carga una grilla de tarjetas de trabajador.
+function skeletonProCards(n){
+  const card = `<div class="sk-card"><div class="sk-top"><div class="sk-box"></div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+      <div class="sk-line" style="width:70%;"></div><div class="sk-line" style="width:45%;"></div>
+      <div class="sk-line" style="width:55%;margin-top:4px;"></div><div class="sk-line" style="width:40%;"></div>
+    </div></div><div class="sk-line" style="height:34px;border-radius:9px;margin-top:4px;"></div></div>`;
+  return card.repeat(n);
+}
+
 async function renderHome(){
   const workersBox = document.getElementById('home-workers');
-  if(workersBox) workersBox.innerHTML = `<div class="empty-note">Cargando profesionales destacados...</div>`;
+  if(workersBox) workersBox.innerHTML = skeletonProCards(4);
 
   // Si existe img/hero.jpg (o .webp/.png), se usa como foto del hero; si no, queda la ilustración.
   const heroEl = document.querySelector('.home-hero');
@@ -936,7 +946,7 @@ async function renderBuscar(){
   const q = (document.getElementById('buscar-text').value||'').toLowerCase();
   if(!trabajadoresListaCache){
     const resultsBox = document.getElementById('buscar-results');
-    if(resultsBox) resultsBox.innerHTML = `<div class="empty-note">Cargando...</div>`;
+    if(resultsBox) resultsBox.innerHTML = skeletonProCards(6);
   }
   const trabajadores = await cargarTrabajadores();
   let results = trabajadores.filter(w=>w.estado==='activo');
