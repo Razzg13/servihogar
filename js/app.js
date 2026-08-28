@@ -599,7 +599,7 @@ async function renderHome(){
     heroEl.dataset.heroChecked = '1';
     ['webp','jpg','png'].forEach(ext=>{
       const probe = new Image();
-      probe.onload = ()=>{ heroEl.classList.add('has-photo'); heroEl.style.setProperty('--hero-photo', `url("img/hero.${ext}")`); };
+      probe.onload = ()=>{ heroEl.classList.add('has-photo'); heroEl.style.setProperty('--hero-photo', `url("${new URL('img/hero.'+ext, document.baseURI).href}")`); };
       probe.src = `img/hero.${ext}`;
     });
   }
