@@ -593,11 +593,22 @@ async function renderHome(){
   const workersBox = document.getElementById('home-workers');
   if(workersBox) workersBox.innerHTML = `<div class="empty-note">Cargando profesionales destacados...</div>`;
 
+  // Si existe img/hero.jpg (o .webp/.png), se usa como foto del hero; si no, queda la ilustración.
+  const heroEl = document.querySelector('.home-hero');
+  if(heroEl && !heroEl.dataset.heroChecked){
+    heroEl.dataset.heroChecked = '1';
+    ['webp','jpg','png'].forEach(ext=>{
+      const probe = new Image();
+      probe.onload = ()=>{ heroEl.classList.add('has-photo'); heroEl.style.setProperty('--hero-photo', `url("img/hero.${ext}")`); };
+      probe.src = `img/hero.${ext}`;
+    });
+  }
+
   const catsBox = document.getElementById('home-cats');
   if(catsBox){
     const iconMas = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`;
     catsBox.innerHTML = CATS.map(c=>
-      `<button class="svc-card" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></button>`
+      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></button>`
     ).join('') + `<button class="svc-card" onclick="nav('buscar')">${iconMas}<span>Más</span></button>`;
   }
 
@@ -619,17 +630,19 @@ function proCardHTML(w){
   const rating = avg(w.resenas);
   const n = (w.resenas || []).length;
   return `<div class="pro-card">
-    <div class="pro-photo">${avatarHTML(w.nombre, w.foto_url)}</div>
-    <div class="pro-body">
-      <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Verificado">✓</span>':''}</div>
-      <div class="pro-cat">${esc(w.categoria || '')}</div>
-      <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
-      <div class="pro-loc">${ICONO_UBICACION}${esc(w.zona || 'Ibagué')}</div>
-      <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
-      <div class="pro-actions">
-        <button class="btn btn-outline" onclick="verPerfil('${w.id}')">Ver perfil</button>
-        <button class="btn btn-primary" onclick="irAAgendar('${w.id}')">Agendar</button>
+    <div class="pro-top">
+      <div class="pro-photo">${avatarHTML(w.nombre, w.foto_url)}</div>
+      <div class="pro-body">
+        <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Verificado">✓</span>':''}</div>
+        <div class="pro-cat">${esc(w.categoria || '')}</div>
+        <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
+        <div class="pro-loc">${ICONO_UBICACION}${esc(w.zona || 'Ibagué')}</div>
+        <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
       </div>
+    </div>
+    <div class="pro-actions">
+      <button class="btn btn-outline" onclick="verPerfil('${w.id}')">Ver perfil</button>
+      <button class="btn btn-primary" onclick="irAAgendar('${w.id}')">Agendar</button>
     </div>
   </div>`;
 }
@@ -648,22 +661,24 @@ function workerCardHTML(w, opts={}){
     distancia!==null ? `<span class="rating-pill dist">${ICONO_UBICACION}${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</span>` : '',
   ].filter(Boolean).join('');
   return `<div class="pro-card pro-card--list" onclick="verPerfil('${w.id}')">
-    <div class="pro-photo">
-      ${avatarHTML(w.nombre, w.foto_url)}
-      ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
-    </div>
-    <div class="pro-body">
-      <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Verificado">✓</span>':''}</div>
-      <div class="pro-cat">${esc(w.categoria || '')}${w.zona?` · ${esc(w.zona)}`:''}</div>
-      <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
-      ${(insignias || pills) ? `<div class="pro-pills">${insignias}${pills}</div>` : ''}
-      <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
-      <div class="pro-actions">
-        <button class="btn btn-outline" onclick="event.stopPropagation(); verPerfil('${w.id}')">Ver perfil</button>
-        <button class="btn btn-primary" onclick="event.stopPropagation(); irAAgendar('${w.id}')">Agendar</button>
+    <div class="pro-top">
+      <div class="pro-photo">
+        ${avatarHTML(w.nombre, w.foto_url)}
+        ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
       </div>
-      ${compararCheckbox}
+      <div class="pro-body">
+        <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Verificado">✓</span>':''}</div>
+        <div class="pro-cat">${esc(w.categoria || '')}${w.zona?` · ${esc(w.zona)}`:''}</div>
+        <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
+        ${(insignias || pills) ? `<div class="pro-pills">${insignias}${pills}</div>` : ''}
+        <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
+      </div>
     </div>
+    <div class="pro-actions">
+      <button class="btn btn-outline" onclick="event.stopPropagation(); verPerfil('${w.id}')">Ver perfil</button>
+      <button class="btn btn-primary" onclick="event.stopPropagation(); irAAgendar('${w.id}')">Agendar</button>
+    </div>
+    ${compararCheckbox}
   </div>`;
 }
 async function toggleFavorito(workerId){
