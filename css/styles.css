@@ -338,7 +338,8 @@
     background:linear-gradient(150deg, #FCEEDD, #F7E2CC);}
   .hh-art-illo svg{width:100%; height:auto; max-height:100%; filter:drop-shadow(0 20px 30px rgba(28,43,57,0.14));}
   .home-hero.has-photo .hh-art-illo{display:none;}
-  .home-hero.has-photo .hh-art::after{opacity:1;}
+  .home-hero.has-photo .hh-art{clip-path:none; background-position:center top;}
+  .home-hero.has-photo .hh-art::after{display:none;}
 
   .home-sec{margin-bottom:52px;}
   .home-sec-head{display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:22px;}
