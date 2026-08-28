@@ -62,7 +62,10 @@ Security): usuarios, citas, reseñas, mensajes de chat, reportes y
 notificaciones se guardan en una base de datos real y compartida, con acceso
 controlado por políticas de seguridad (cada quien solo puede leer/editar lo
 que le corresponde). Las contraseñas las maneja Supabase Auth, nunca se
-guardan en texto plano. El pago es real pero manual (transferencia por fuera
+guardan en texto plano. El directorio de trabajadores se sirve desde la vista
+`profiles_publicos` (solo campos no sensibles); el `correo` y el `celular` de
+cada usuario nunca salen de su propia sesión ni del panel de administración
+(ver `supabase/021_perfiles_publicos.sql`). El pago es real pero manual (transferencia por fuera
 de la app + comprobante + confirmación del trabajador, sin pasarela de
 pago); la verificación de identidad también es manual (el admin revisa el
 documento subido, sin validación automática de terceros).

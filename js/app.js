@@ -388,6 +388,15 @@ async function cargarPerfilActual(){
 }
 
 /* ---------------- PERFILES (Supabase) ---------------- */
+// La tabla `profiles` solo deja leer la fila propia o (si sos admin) todas.
+// Para ver a cualquier otra persona se usa la vista `profiles_publicos`, que
+// expone solo campos no sensibles (sin correo, celular ni datos de
+// verificación). Esta función elige la fuente según quién consulta.
+function fuentePerfil(id){
+  const yo = currentProfile;
+  const puedeVerLaTabla = yo && (yo.tipo === 'admin' || (id && id === sessionUserId));
+  return puedeVerLaTabla ? 'profiles' : 'profiles_publicos';
+}
 // Cachean en memoria las filas de `profiles` ya traídas, para no repetir
 // consultas de red en cada tecla del buscador o cada re-render.
 const perfilesCache = new Map(); // id -> perfil normalizado
@@ -401,7 +410,8 @@ function cachearPerfiles(rows){
 }
 async function cargarTrabajadores(forzar=false){
   if(trabajadoresListaCache && !forzar) return trabajadoresListaCache;
-  const { data, error } = await sb.from('profiles').select('*, resenas(*)').eq('tipo','trabajador');
+  const fuente = currentProfile && currentProfile.tipo === 'admin' ? 'profiles' : 'profiles_publicos';
+  const { data, error } = await sb.from(fuente).select('*, resenas(*)').eq('tipo','trabajador');
   trabajadoresListaCache = error ? [] : cachearPerfiles(data);
   return trabajadoresListaCache;
 }
@@ -412,7 +422,7 @@ function invalidarPerfil(id){
 async function obtenerPerfil(id, forzar=false){
   if(!id) return null;
   if(!forzar && perfilesCache.has(id)) return perfilesCache.get(id);
-  const { data, error } = await sb.from('profiles').select('*, resenas(*)').eq('id', id).single();
+  const { data, error } = await sb.from(fuentePerfil(id)).select('*, resenas(*)').eq('id', id).single();
   if(error) return null;
   const [perfil] = cachearPerfiles([data]);
   return perfil;
@@ -800,6 +810,7 @@ async function doLogin(e){
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
     if(error){ msg.innerHTML = `<div class="msg err">Correo o contraseña incorrectos.</div>`; return; }
     sessionUserId = data.user.id;
+    perfilesCache.clear(); trabajadoresListaCache = null;
     await cargarPerfilActual();
     if(currentProfile && currentProfile.estado==='bloqueado'){
       msg.innerHTML = `<div class="msg err">Esta cuenta está bloqueada. Contacta al administrador.</div>`;
@@ -862,6 +873,7 @@ async function doRegister(e){
 async function logout(){
   await sb.auth.signOut();
   sessionUserId = null; currentProfile = null;
+  perfilesCache.clear(); trabajadoresListaCache = null;
   cerrarCanalChat(); cerrarCanalNotif();
   nav('home');
 }
