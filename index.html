@@ -39,76 +39,90 @@
 
   <!-- HOME -->
   <section class="view active" id="v-home">
-    <div class="hero">
-      <div class="txt">
-        <div class="eyebrow"><span class="dot"></span> Servicios técnicos y domésticos · Ibagué</div>
-        <h1>Encuentra a alguien de confianza para tu casa</h1>
-        <p>Plomeros, electricistas, personal de limpieza y más — con calificaciones reales, en un solo lugar.</p>
-        <div class="hero-search">
-          <input id="home-search" placeholder="¿Qué necesitas? Ej: electricista">
-          <button class="btn btn-primary" onclick="buscarDesdeHome()">Buscar</button>
+    <div class="home-hero">
+      <div class="hh-txt">
+        <h1>Encuentra ayuda para tu hogar, <span class="hh-accent">cerca de ti.</span></h1>
+        <p>Profesionales confiables para cada tarea que necesites.</p>
+        <div class="hh-search">
+          <span class="hh-search-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </span>
+          <input id="home-search" placeholder="¿Qué servicio necesitas?">
+          <span class="hh-loc" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>
+            Ibagué
+          </span>
+          <button class="btn btn-primary" onclick="buscarDesdeHome()">Buscar profesionales</button>
         </div>
-        <div class="trust-row" aria-label="Ventajas de Hogandia">
-          <span>Perfiles verificados</span>
-          <span>Agenda en minutos</span>
-          <span>Pago por transferencia con comprobante</span>
-        </div>
-        <div class="stats">
-          <div><div class="n" id="stat-workers">0</div><div class="l">Trabajadores</div></div>
-          <div><div class="n" id="stat-jobs">0</div><div class="l">Servicios agendados</div></div>
-          <div><div class="n" id="stat-rating">—</div><div class="l">Calificación prom.</div></div>
+        <div class="hh-trust" aria-label="Por qué elegir Hogandía">
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="t-green"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg> Profesionales verificados</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="t-amber"><path d="M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.6-4.1 6.1-.6z"/></svg> Calificaciones reales</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="t-orange"><path d="M12 20s-7-4.4-9.3-8.5C1 8 2.7 4.5 6 4.5c2 0 3.3 1.2 4 2.3.7-1.1 2-2.3 4-2.3 3.3 0 5 3.5 3.3 7C19 15.6 12 20 12 20z"/></svg> Atención cercana y confiable</span>
         </div>
       </div>
-      <div class="hero-feature">
-        <img src="img/icon.png" alt="">
-        <div class="hf-divider"></div>
-        <div class="hf-rating"><span class="hf-stars">★★★★★</span><span id="hf-rating-val">—</span></div>
-        <div class="hf-label">Calificación promedio real de nuestros trabajadores</div>
+      <div class="hh-art" aria-hidden="true">
+        <svg viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M28 92 L88 40 L148 92"/>
+          <path d="M40 84 v70 h96 v-70"/>
+          <rect x="78" y="112" width="26" height="26"/>
+          <path d="M120 150 h54 v-38 h-84 v38 h14"/>
+          <path d="M110 112 v-14 a19 19 0 0 1 38 0 v14"/>
+          <path d="M128 112 v-22"/>
+          <path d="M138 90 l10 -12 a10 10 0 0 0 -14 -14 l-8 10 6 6"/>
+        </svg>
       </div>
     </div>
 
-    <div class="section-title"><h2>Cómo funciona</h2></div>
-    <div class="steps-grid">
-      <div class="step-card">
-        <span class="step-num">1</span>
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10" cy="10" r="6"/><path d="M20.5 20.5l-4.8-4.8"/></svg>
-        <h3>Busca</h3>
-        <p>Filtra por categoría, zona o calificación y compara perfiles verificados en un solo lugar.</p>
-      </div>
-      <div class="step-card">
-        <span class="step-num">2</span>
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><path d="M9 14l2 2 4-4"/></svg>
-        <h3>Agenda</h3>
-        <p>Elige el día y la hora que te sirvan; el trabajador confirma o rechaza tu solicitud.</p>
-      </div>
-      <div class="step-card">
-        <span class="step-num">3</span>
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.6-4.1 6.1-.6z" stroke-linejoin="round"/></svg>
-        <h3>Califica</h3>
-        <p>Después del servicio, deja tu reseña y ayuda a otros clientes a elegir mejor.</p>
+    <div class="home-sec">
+      <div class="home-sec-head"><h2>Servicios populares</h2><button class="home-sec-link" onclick="nav('buscar')">Ver todos →</button></div>
+      <div class="svc-row" id="home-cats"></div>
+    </div>
+
+    <div class="home-sec">
+      <div class="home-sec-head"><h2>Profesionales destacados</h2><button class="home-sec-link" onclick="nav('buscar')">Ver todos →</button></div>
+      <div class="pro-row" id="home-workers"></div>
+    </div>
+
+    <div class="home-steps">
+      <h2>¿Cómo funciona?</h2>
+      <div class="step-track">
+        <div class="step">
+          <span class="step-dot">1</span>
+          <svg class="step-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10" cy="10" r="6"/><path d="M20.5 20.5l-4.8-4.8"/></svg>
+          <h3>Busca</h3>
+          <p>Encuentra el profesional que necesitás por oficio, zona o calificación.</p>
+        </div>
+        <div class="step">
+          <span class="step-dot">2</span>
+          <svg class="step-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><path d="M9 14l2 2 4-4"/></svg>
+          <h3>Agenda</h3>
+          <p>Elegí la fecha y el horario que te convengan; el trabajador confirma.</p>
+        </div>
+        <div class="step">
+          <span class="step-dot">3</span>
+          <svg class="step-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 10h8M8 14h5"/><path d="M4 5h16v12H8l-4 4z" stroke-linejoin="round"/></svg>
+          <h3>Recibe</h3>
+          <p>Coordiná los detalles directamente con el trabajador por el chat.</p>
+        </div>
+        <div class="step">
+          <span class="step-dot">4</span>
+          <svg class="step-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.6-4.1 6.1-.6z" stroke-linejoin="round"/></svg>
+          <h3>Califica</h3>
+          <p>Después del servicio dejá tu reseña y ayudá a otros a elegir mejor.</p>
+        </div>
       </div>
     </div>
 
-    <div class="benefit-strip">
-      <div>
-        <b>Compara antes de elegir</b>
-        <span>Revisa tarifa, zona, reseñas y servicios sin salir de la búsqueda.</span>
+    <div class="home-cta">
+      <div class="home-cta-txt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg>
+        <div>
+          <b>¿Necesitás ayuda en tu hogar?</b>
+          <span>Encuentra un profesional de confianza.</span>
+        </div>
       </div>
-      <div>
-        <b>Todo queda registrado</b>
-        <span>Citas, chat, pagos con comprobante, calificaciones y reportes en un solo flujo.</span>
-      </div>
-      <div>
-        <b>Hecho para Ibagué</b>
-        <span>Mapa por zonas y categorías pensadas para necesidades del hogar.</span>
-      </div>
+      <button class="btn" onclick="nav('buscar')">Buscar servicio →</button>
     </div>
-
-    <div class="section-title"><h2>Categorías</h2></div>
-    <div class="cat-grid" id="home-cats"></div>
-
-    <div class="section-title"><h2>Trabajadores destacados</h2><button class="see-all" onclick="nav('buscar')">Ver todos →</button></div>
-    <div class="worker-grid" id="home-workers"></div>
   </section>
 
   <!-- AUTH -->

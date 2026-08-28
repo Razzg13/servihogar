@@ -518,6 +518,7 @@ document.addEventListener('click', e=>{
 
 function renderNav(active){
   const u = currentUser();
+  document.body.dataset.view = active;
   const links = document.getElementById('navlinks');
   const auth = document.getElementById('navauth');
   let linkHtml = `<button class="${active==='home'?'on':''}" onclick="nav('home')">Inicio</button>
@@ -547,8 +548,11 @@ function renderNav(active){
                        <button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${loadTheme()==='dark'?'☀️':'🌙'}</button>`;
     renderNotifCount();
   } else {
-    auth.innerHTML = `<button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${loadTheme()==='dark'?'☀️':'🌙'}</button>
-                       <button class="btn btn-ghost" onclick="nav('auth'); switchAuthTab('login')">Ingresar</button>
+    const locPill = active==='home'
+      ? `<span class="nav-loc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>Ibagué</span>`
+      : '';
+    auth.innerHTML = `${locPill}<button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${loadTheme()==='dark'?'☀️':'🌙'}</button>
+                       <button class="btn btn-ghost" onclick="nav('auth'); switchAuthTab('login')">Iniciar sesión</button>
                        <button class="btn btn-primary" onclick="nav('auth'); switchAuthTab('register')">Crear cuenta</button>`;
   }
 
@@ -587,31 +591,47 @@ async function toggleNotifPanel(){
 /* ---------------- HOME ---------------- */
 async function renderHome(){
   const workersBox = document.getElementById('home-workers');
-  if(workersBox) workersBox.innerHTML = `<div class="empty-note">Cargando trabajadores destacados...</div>`;
+  if(workersBox) workersBox.innerHTML = `<div class="empty-note">Cargando profesionales destacados...</div>`;
+
+  const catsBox = document.getElementById('home-cats');
+  if(catsBox){
+    const iconMas = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`;
+    catsBox.innerHTML = CATS.map(c=>
+      `<button class="svc-card" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></button>`
+    ).join('') + `<button class="svc-card" onclick="nav('buscar')">${iconMas}<span>Más</span></button>`;
+  }
+
   try {
-    const [trabajadores, { count: totalCitas }] = await Promise.all([
-      cargarTrabajadores(),
-      sb.from('citas').select('id', { count: 'exact', head: true })
-    ]);
-    document.getElementById('stat-workers').textContent = trabajadores.length;
-    document.getElementById('stat-jobs').textContent = totalCitas || 0;
-    const todasResenas = trabajadores.flatMap(w=>w.resenas||[]);
-    const ratingProm = todasResenas.length
-      ? (todasResenas.reduce((a,r)=>a+r.estrellas,0)/todasResenas.length).toFixed(1)
-      : '—';
-    document.getElementById('stat-rating').textContent = ratingProm;
-    document.getElementById('hf-rating-val').textContent = ratingProm;
-
-    document.getElementById('home-cats').innerHTML = CATS.map(c=>
-      `<div class="cat-card" onclick="irABuscarConCategoria('${c.n}')">${iconSVG(c.n)}<span>${c.n}</span></div>`
-    ).join('');
-
+    const trabajadores = await cargarTrabajadores();
     const destacados = trabajadores.filter(u=>u.estado==='activo')
-      .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,3);
-    document.getElementById('home-workers').innerHTML = destacados.map(workerCardHTML).join('');
+      .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,4);
+    if(workersBox) workersBox.innerHTML = destacados.length
+      ? destacados.map(proCardHTML).join('')
+      : `<div class="empty-note">Todavía no hay profesionales para mostrar.</div>`;
   } catch(e){
     if(workersBox) workersBox.innerHTML = `<div class="empty-note">No se pudo cargar. <button type="button" class="link-btn" onclick="renderHome()">Reintentar</button></div>`;
   }
+}
+
+// Tarjeta de profesional para la home (foto, verificado, rating, zona, tarifa y
+// acciones). Buscar/Favoritos/Perfil siguen usando workerCardHTML.
+function proCardHTML(w){
+  const rating = avg(w.resenas);
+  const n = (w.resenas || []).length;
+  return `<div class="pro-card">
+    <div class="pro-photo">${avatarHTML(w.nombre, w.foto_url)}</div>
+    <div class="pro-body">
+      <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Verificado">✓</span>':''}</div>
+      <div class="pro-cat">${esc(w.categoria || '')}</div>
+      <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
+      <div class="pro-loc">${ICONO_UBICACION}${esc(w.zona || 'Ibagué')}</div>
+      <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
+      <div class="pro-actions">
+        <button class="btn btn-outline" onclick="verPerfil('${w.id}')">Ver perfil</button>
+        <button class="btn btn-primary" onclick="irAAgendar('${w.id}')">Agendar</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function workerCardHTML(w, opts={}){
