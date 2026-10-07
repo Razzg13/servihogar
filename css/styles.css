@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+/* Las tipografías se cargan desde index.html con <link> + preconnect (antes se
+   hacía con @import acá, que obliga al navegador a bajar y parsear este CSS
+   antes de descubrir la fuente: una cadena de dos viajes de red). */
 
   :root{
     --navy:#1C2B39; --navy-deep:#131E28; --paper:#FAF3E9; --card:#FFFFFF;
@@ -53,7 +55,18 @@
   a{color:inherit; text-decoration:none;}
   button{font-family:inherit; cursor:pointer;}
   .hidden{display:none !important;}
+  /* Texto solo para lectores de pantalla: se necesita un <label> real para los
+     buscadores y selects (el placeholder no etiqueta nada), pero visualmente el
+     diseño ya comunica para qué sirve cada campo. */
+  .sr-only{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
+    clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; border:0;}
   .wrap{max-width:1120px; margin:0 auto; padding:0 24px;}
+
+  /* Enlace "saltar al contenido": invisible hasta que alguien navega con teclado. */
+  .skip-link{position:absolute; left:12px; top:-60px; z-index:100; background:var(--orange); color:#fff;
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13.5px; padding:10px 16px;
+    border-radius:0 0 10px 10px; transition:top .15s ease;}
+  .skip-link:focus{top:0;}
 
   /* NAV */
   header{background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:50;}
@@ -214,15 +227,20 @@
   .cal-nav:disabled{opacity:0.35; cursor:default;}
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px; text-align:center;}
   .cal-grid .dow{font-family:'IBM Plex Mono'; font-size:10px; color:var(--ink-soft); padding-bottom:4px;}
-  .cal-grid .day{font-size:13px; padding:10px 0; border-radius:9px; cursor:pointer; border:1.5px solid transparent; font-weight:500;}
-  .cal-grid .day:hover:not(.muted):not(.sel){border-color:var(--orange);}
+  .cal-grid .day{font-size:13px; padding:10px 0; border-radius:9px; cursor:pointer; border:1.5px solid transparent; font-weight:500; background:none; font-family:inherit; color:var(--ink); width:100%;}
+  .cal-grid .day:hover:not(.muted):not(.sel):not(.closed){border-color:var(--orange);}
   .cal-grid .day.muted{color:var(--line); cursor:default;}
+  /* Día que el trabajador no atiende: se muestra igual (para que se lea el mes
+     completo) pero bloqueado y tachado, así se distingue de un día pasado. */
+  .cal-grid .day.closed{color:var(--ink-soft); opacity:0.45; cursor:not-allowed; text-decoration:line-through;}
   .cal-grid .day.sel{background:var(--orange); color:#fff; font-weight:700;}
+  .cal-note{font-size:12px; color:var(--ink-soft); margin:-8px 0 18px;}
   .slot-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:22px;}
   .slot{background:var(--card); border:1.5px solid var(--line); border-radius:10px; padding:11px 4px; text-align:center; font-family:'IBM Plex Mono'; font-size:13px; font-weight:600; color:var(--navy); cursor:pointer;}
-  .slot:hover:not(.muted):not(.sel){border-color:var(--orange);}
+  .slot:hover:not(:disabled):not(.sel){border-color:var(--orange);}
   .slot.sel{background:var(--orange); border-color:var(--orange); color:#fff;}
-  .slot.muted{color:#C7CBCA; cursor:default; opacity:0.6;}
+  .slot.muted{color:#C7CBCA; cursor:not-allowed; opacity:0.6;}
+  [data-theme="dark"] .slot.muted{color:var(--ink-soft);}
 
   /* TABLES / DASHBOARD */
   table{width:100%; border-collapse:collapse; background:var(--card); border-radius:16px; overflow:hidden; border:1px solid var(--line); box-shadow:var(--shadow);}
@@ -294,6 +312,10 @@
   .stat-bar-n{font-family:'IBM Plex Mono'; font-size:12px; color:var(--ink-soft); width:24px; text-align:right; flex-shrink:0;}
 
   footer{background:var(--navy-deep); color:#8FA3AE; padding:28px 0; font-size:12.5px; text-align:center;}
+  footer p{margin-bottom:10px;}
+  .footer-links{display:flex; flex-wrap:wrap; gap:8px 18px; justify-content:center;}
+  .footer-links a{color:#B9C7D0; font-size:12.5px; font-weight:600;}
+  .footer-links a:hover{color:#fff; text-decoration:underline;}
 
   .toast-stack{position:fixed; top:16px; right:16px; z-index:200; display:flex; flex-direction:column; gap:10px; max-width:320px; pointer-events:none;}
   .toast{display:flex; align-items:flex-start; gap:10px; background:var(--navy-deep); color:#fff; padding:12px 14px; border-radius:12px; box-shadow:0 20px 40px -14px rgba(0,0,0,0.45); font-size:12.5px; line-height:1.4; border-left:3px solid var(--orange); animation:toast-in .22s ease;}

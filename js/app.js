@@ -151,18 +151,52 @@ function mostrarToast(mensaje, tipo='info'){
 // no respetan el tema oscuro) por un modal propio con el mismo lenguaje visual
 // (.card, .btn-primary/.btn-outline). Ambas devuelven una Promise, igual que
 // esperaría el código que las llama con await.
+//
+// El modal es un diálogo accesible: guarda quién tenía el foco para devolvérselo
+// al cerrar, mantiene el foco adentro mientras está abierto (Tab y Shift+Tab
+// ciclan entre sus controles) y se cierra con Escape.
+let modalEscHandler = null;
+let modalFocoPrevio = null;
+function focoDentroDelModal(overlay, evento){
+  const controles = [...overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  if(!controles.length) return;
+  const primero = controles[0];
+  const ultimo = controles[controles.length - 1];
+  if(evento.shiftKey && document.activeElement === primero){ evento.preventDefault(); ultimo.focus(); }
+  else if(!evento.shiftKey && document.activeElement === ultimo){ evento.preventDefault(); primero.focus(); }
+}
+// Instala el comportamiento común a los dos modales y devuelve la función de
+// cierre que resuelve la Promise con el valor elegido.
+function abrirModal(overlay, cerrar){
+  overlay.classList.remove('hidden');
+  overlay.onclick = e => { if(e.target===overlay) cerrar(null); };
+  modalEscHandler = e => {
+    if(e.key==='Escape'){ e.preventDefault(); cerrar(null); }
+    else if(e.key==='Tab'){ focoDentroDelModal(overlay, e); }
+  };
+  document.addEventListener('keydown', modalEscHandler);
+}
 function cerrarModal(){
   const overlay = document.getElementById('modal-overlay');
   overlay.classList.add('hidden');
   overlay.innerHTML = '';
   document.removeEventListener('keydown', modalEscHandler);
+  // Devolver el foco a donde estaba: sin esto, quien navega con teclado queda
+  // al principio de la página después de cada confirmación. Se comprueba con
+  // isConnected (y no con document.contains, que no existe como función).
+  if(modalFocoPrevio && typeof modalFocoPrevio.focus === 'function'
+     && (modalFocoPrevio.isConnected === undefined || modalFocoPrevio.isConnected)){
+    modalFocoPrevio.focus();
+  }
+  modalFocoPrevio = null;
 }
-let modalEscHandler = null;
 function confirmarModal(mensaje, opts={}){
   return new Promise(resolve=>{
     const overlay = document.getElementById('modal-overlay');
     const cerrar = valor => { cerrarModal(); resolve(valor); };
-    overlay.innerHTML = `<div class="card modal-box">
+    modalFocoPrevio = document.activeElement;
+    overlay.innerHTML = `<div class="card modal-box" role="document">
       <h3>${esc(opts.titulo || 'Confirmar acción')}</h3>
       <p>${esc(mensaje)}</p>
       <div class="modal-actions">
@@ -170,12 +204,9 @@ function confirmarModal(mensaje, opts={}){
         <button type="button" class="btn ${opts.peligro===false?'btn-primary':'btn-danger'}" id="modal-confirmar">${esc(opts.textoConfirmar || 'Confirmar')}</button>
       </div>
     </div>`;
-    overlay.classList.remove('hidden');
     document.getElementById('modal-cancelar').onclick = () => cerrar(false);
     document.getElementById('modal-confirmar').onclick = () => cerrar(true);
-    overlay.onclick = e => { if(e.target===overlay) cerrar(false); };
-    modalEscHandler = e => { if(e.key==='Escape') cerrar(false); };
-    document.addEventListener('keydown', modalEscHandler);
+    abrirModal(overlay, cerrar);
     document.getElementById('modal-confirmar').focus();
   });
 }
@@ -183,7 +214,8 @@ function pedirTextoModal(mensaje, opts={}){
   return new Promise(resolve=>{
     const overlay = document.getElementById('modal-overlay');
     const cerrar = valor => { cerrarModal(); resolve(valor); };
-    overlay.innerHTML = `<div class="card modal-box">
+    modalFocoPrevio = document.activeElement;
+    overlay.innerHTML = `<div class="card modal-box" role="document">
       <h3>${esc(opts.titulo || 'Escribe una respuesta')}</h3>
       <p>${esc(mensaje)}</p>
       <div class="field"><textarea id="modal-texto" rows="4" placeholder="${esc(opts.placeholder||'')}"></textarea></div>
@@ -192,13 +224,10 @@ function pedirTextoModal(mensaje, opts={}){
         <button type="button" class="btn btn-primary" id="modal-confirmar">${esc(opts.textoConfirmar || 'Enviar')}</button>
       </div>
     </div>`;
-    overlay.classList.remove('hidden');
     const input = document.getElementById('modal-texto');
     document.getElementById('modal-cancelar').onclick = () => cerrar(null);
     document.getElementById('modal-confirmar').onclick = () => cerrar(input.value);
-    overlay.onclick = e => { if(e.target===overlay) cerrar(null); };
-    modalEscHandler = e => { if(e.key==='Escape') cerrar(null); };
-    document.addEventListener('keydown', modalEscHandler);
+    abrirModal(overlay, cerrar);
     input.focus();
   });
 }
@@ -216,7 +245,7 @@ async function conCargando(btn, textoCargando, accion){
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, servicioFiltro:null, workerActual:null, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[] };
+let state = { catFiltro:null, servicioFiltro:null, workerActual:null, workerPerfil:null, workerPerfilError:false, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[] };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -412,7 +441,12 @@ async function cargarTrabajadores(forzar=false){
   if(trabajadoresListaCache && !forzar) return trabajadoresListaCache;
   const fuente = currentProfile && currentProfile.tipo === 'admin' ? 'profiles' : 'profiles_publicos';
   const { data, error } = await sb.from(fuente).select('*, resenas(*)').eq('tipo','trabajador');
-  trabajadoresListaCache = error ? [] : cachearPerfiles(data);
+  // Un error de red NO se cachea: si se guardara como lista vacía, el botón
+  // "Reintentar" quedaría mostrando "todavía no hay profesionales" para siempre
+  // hasta recargar la página (invalidarPerfil limpia el caché, pero nadie lo
+  // llama desde una pantalla de error).
+  if(error) return [];
+  trabajadoresListaCache = cachearPerfiles(data);
   return trabajadoresListaCache;
 }
 function invalidarPerfil(id){
@@ -471,7 +505,27 @@ function avatarHTML(nombre, fotoUrl){
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
-const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin','resetpass','privacidad','terminos','pqr'];
+const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin','resetpass','privacidad','terminos','accesibilidad','pqr'];
+// Título del documento por vista: la app es de una sola página, así que sin esto
+// todas las pantallas comparten el mismo <title> (malo para el historial del
+// navegador, para compartir un link y para lectores de pantalla, que anuncian
+// el título al cambiar de "página").
+const TITULOS_VISTA = {
+  home: 'Hogandia — servicios técnicos y domésticos en Ibagué',
+  auth: 'Iniciar sesión o crear cuenta — Hogandia',
+  buscar: 'Buscar profesionales — Hogandia',
+  perfil: 'Perfil del profesional — Hogandia',
+  agendar: 'Agendar una cita — Hogandia',
+  miscitas: 'Mis citas — Hogandia',
+  favoritos: 'Mis favoritos — Hogandia',
+  trabajo: 'Panel del trabajador — Hogandia',
+  admin: 'Panel de administración — Hogandia',
+  resetpass: 'Nueva contraseña — Hogandia',
+  pqr: 'Peticiones, quejas y reclamos — Hogandia',
+  terminos: 'Términos y condiciones — Hogandia',
+  privacidad: 'Política de privacidad — Hogandia',
+  accesibilidad: 'Accesibilidad — Hogandia',
+};
 let suprimirPush = false; // true mientras restauramos una ruta (popstate / carga inicial): no volver a empujar historial
 
 function routeHashFor(view){
@@ -503,8 +557,11 @@ function nav(view){
   cerrarCanalChat();
   cerrarCanalChatPrevio();
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.getElementById('v-'+view).classList.add('active');
+  const seccion = document.getElementById('v-'+view);
+  if(!seccion) return; // vista desconocida: no se rompe la navegación
+  seccion.classList.add('active');
   window.scrollTo({top:0, behavior:'instant'});
+  if(TITULOS_VISTA[view]) document.title = TITULOS_VISTA[view];
   renderNav(view);
   if(view==='home') renderHome();
   if(view==='buscar') renderBuscar();
@@ -513,6 +570,7 @@ function nav(view){
   if(view==='trabajo') renderTrabajo();
   if(view==='admin') renderAdmin();
   if(view==='pqr') renderPQR();
+  if(view==='accesibilidad') renderAccesibilidad();
   if(!suprimirPush){
     const hash = routeHashFor(view);
     if(location.hash !== hash) history.pushState(null, '', hash);
@@ -618,6 +676,11 @@ function skeletonProCards(n){
 
 async function renderHome(){
   const workersBox = document.getElementById('home-workers');
+  // Se carga el perfil ANTES de pedir los trabajadores: `cargarTrabajadores`
+  // elige la tabla `profiles` (con reseñas) cuando hay sesión de admin, y si se
+  // llamaba primero se cacheaba la lista de `profiles_publicos` y el admin veía
+  // el directorio sin reseñas hasta recargar.
+  if(sessionUserId && !currentProfile) await cargarPerfilActual();
   if(workersBox) workersBox.innerHTML = skeletonProCards(4);
 
   // Si existe img/hero.jpg (o .webp/.png), se usa como foto del hero; si no, queda la ilustración.
@@ -635,20 +698,66 @@ async function renderHome(){
   if(catsBox){
     const iconMas = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`;
     catsBox.innerHTML = CATS.map(c=>
-      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${c.n}')"><span class="ic-wrap">${iconSVG(c.n)}</span><span>${c.n}</span></button>`
+      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${esc(c.n)}')"><span class="ic-wrap">${iconSVG(c.n)}</span><span>${esc(c.n)}</span></button>`
     ).join('') + `<button class="svc-card" onclick="nav('buscar')"><span class="ic-wrap">${iconMas}</span><span>Más</span></button>`;
   }
 
+  await pintarDestacadosHome();
+}
+// Los 4 profesionales destacados, filtrados por el término del buscador de la
+// home. Se separa de renderHome porque el buscador de la home actualiza solo
+// esta parte en cada tecla: así hay respuesta visible sin salir de la portada.
+async function pintarDestacadosHome(){
+  const workersBox = document.getElementById('home-workers');
+  if(!workersBox) return;
+  const q = textoBusquedaHome();
   try {
     const trabajadores = await cargarTrabajadores();
     const destacados = trabajadores.filter(u=>u.estado==='activo')
+      .filter(u=>coincideBusqueda(u, q))
       .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,4);
-    if(workersBox) workersBox.innerHTML = destacados.length
+    workersBox.innerHTML = destacados.length
       ? destacados.map(proCardHTML).join('')
-      : `<div class="empty-note">Todavía no hay profesionales para mostrar.</div>`;
+      : `<div class="empty-note">${q
+            ? `Ningún profesional coincide con “${esc(q)}”. <button type="button" class="link-btn" onclick="buscarDesdeHome()">Buscar en todo el directorio</button>`
+            : 'Todavía no hay profesionales para mostrar.'}</div>`;
   } catch(e){
-    if(workersBox) workersBox.innerHTML = `<div class="empty-note">No se pudo cargar. <button type="button" class="link-btn" onclick="renderHome()">Reintentar</button></div>`;
+    // No se cachea el fallo (ver cargarTrabajadores): así el botón "Reintentar"
+    // vuelve a consultar de verdad en vez de recibir una lista vacía cacheada.
+    workersBox.innerHTML = `<div class="empty-note">No se pudo cargar. <button type="button" class="link-btn" onclick="renderHome()">Reintentar</button></div>`;
   }
+}
+function textoBusquedaHome(){
+  const input = document.getElementById('home-search');
+  return ((input && input.value) || '').toLowerCase().trim();
+}
+function sincronizarBusqueda(valor){
+  const destino = document.getElementById('buscar-text');
+  if(destino && destino.value !== valor) destino.value = valor;
+}
+// Mismo criterio de coincidencia que el buscador completo (nombre, categoría,
+// zona y especialidades), para que filtrar en la home y en Buscar dé lo mismo.
+function coincideBusqueda(w, q){
+  if(!q) return true;
+  return (w.nombre||'').toLowerCase().includes(q)
+    || (w.categoria||'').toLowerCase().includes(q)
+    || (w.zona||'').toLowerCase().includes(q)
+    || (w.servicios||[]).some(s=>s.toLowerCase().includes(q));
+}
+const ESPERA_BUSQUEDA_MS = 200;
+let temporizadorBusquedaHome = null;
+function buscarDesdeHomeEnVivo(){
+  const valor = textoBusquedaHome();
+  clearTimeout(temporizadorBusquedaHome);
+  temporizadorBusquedaHome = setTimeout(()=>{
+    // Se copia el término al buscador completo de una vez (sin esperar al clic
+    // en "Buscar"), para que al pasar a esa vista la búsqueda siga siendo la misma.
+    sincronizarBusqueda(valor);
+    const activa = document.querySelector('.view.active');
+    const enHome = !activa || activa.id === 'v-home';
+    if(enHome) pintarDestacadosHome();
+    else renderBuscar();
+  }, ESPERA_BUSQUEDA_MS);
 }
 
 // Tarjeta de profesional para la home (foto, verificado, rating, zona, tarifa y
@@ -732,6 +841,18 @@ async function renderFavoritos(){
     : `<div class="empty-note">Todavía no has guardado trabajadores. Toca el corazón ♡ en cualquier tarjeta para guardarlo aquí.</div>`;
 }
 
+/* ---------------- ACCESIBILIDAD ---------------- */
+// El contenido de esta vista es estático (está en index.html, así lo indexan
+// los buscadores y se lee aunque falle el JS). Acá solo se completa la fecha de
+// última revisión, que es lo único que cambia con el tiempo.
+const ACCESIBILIDAD_ULTIMA_REVISION = '2026-08-06';
+function renderAccesibilidad(){
+  const el = document.getElementById('accesibilidad-actualizado');
+  if(!el) return;
+  const fecha = new Date(ACCESIBILIDAD_ULTIMA_REVISION + 'T12:00:00');
+  el.textContent = `Última actualización: ${fecha.getDate()} de ${MESES[fecha.getMonth()].toLowerCase()} de ${fecha.getFullYear()}`;
+}
+
 /* ---------------- PQR (peticiones, quejas y reclamos) ---------------- */
 async function renderPQR(){
   const u = currentUser();
@@ -792,13 +913,15 @@ async function enviarPQR(){
   });
 }
 
-function irABuscarConCategoria(cat){ state.catFiltro = cat; nav('buscar'); }
+function irABuscarConCategoria(cat){ state.catFiltro = cat; state.servicioFiltro = null; nav('buscar'); }
+// "Buscar profesionales" desde la home: lleva el término escrito al buscador
+// completo y abre esa vista. El filtrado en vivo de la portada está en
+// buscarDesdeHomeEnVivo / pintarDestacadosHome.
 function buscarDesdeHome(){
-  const q = document.getElementById('home-search').value;
+  sincronizarBusqueda(textoBusquedaHome());
   state.catFiltro = null;
+  state.servicioFiltro = null;
   nav('buscar');
-  document.getElementById('buscar-text').value = q;
-  renderBuscar();
 }
 
 /* ---------------- AUTH ---------------- */
@@ -952,19 +1075,25 @@ function toggleFiltroDisponibleAhora(){
   renderBuscar();
 }
 async function renderBuscar(){
-  document.getElementById('buscar-chips').innerHTML = ['Todas', ...CATS.map(c=>c.n)].map(c=>{
-    const active = (c==='Todas' && !state.catFiltro) || c===state.catFiltro;
-    return `<button class="chipbtn ${active?'on':''}" onclick="setCatFiltro('${c==='Todas'?'':c}')">${c}</button>`;
-  }).join('');
-  const btnDisp = document.getElementById('btn-disponible-ahora');
-  if(btnDisp) btnDisp.classList.toggle('btn-primary', !!state.filtroDisponibleAhora);
-  if(btnDisp) btnDisp.classList.toggle('btn-outline', !state.filtroDisponibleAhora);
-
-  const q = (document.getElementById('buscar-text').value||'').toLowerCase();
-  if(!trabajadoresListaCache){
-    const resultsBox = document.getElementById('buscar-results');
-    if(resultsBox) resultsBox.innerHTML = skeletonProCards(6);
+  const chipsBox = document.getElementById('buscar-chips');
+  if(chipsBox){
+    chipsBox.innerHTML = ['Todas', ...CATS.map(c=>c.n)].map(c=>{
+      const active = (c==='Todas' && !state.catFiltro) || c===state.catFiltro;
+      return `<button type="button" class="chipbtn ${active?'on':''}" aria-pressed="${active}" onclick="setCatFiltro('${esc(c==='Todas'?'':c)}')">${esc(c)}</button>`;
+    }).join('');
   }
+  const btnDisp = document.getElementById('btn-disponible-ahora');
+  if(btnDisp){
+    btnDisp.classList.toggle('btn-primary', !!state.filtroDisponibleAhora);
+    btnDisp.classList.toggle('btn-outline', !state.filtroDisponibleAhora);
+    btnDisp.setAttribute('aria-pressed', String(!!state.filtroDisponibleAhora));
+  }
+  const inputTexto = document.getElementById('buscar-text');
+  const selectOrden = document.getElementById('buscar-orden');
+  const q = ((inputTexto && inputTexto.value) || '').toLowerCase().trim();
+  const box = document.getElementById('buscar-results');
+  if(!trabajadoresListaCache && box) box.innerHTML = skeletonProCards(6);
+
   const trabajadores = await cargarTrabajadores();
   let results = trabajadores.filter(w=>w.estado==='activo');
   if(state.catFiltro) results = results.filter(w=>w.categoria===state.catFiltro);
@@ -981,8 +1110,12 @@ async function renderBuscar(){
         conteo.set(key, (conteo.get(key)||0) + 1);
       }));
       const top = [...conteo.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([s])=>s);
+      // El texto del servicio lo escribe el trabajador: va escapado dos veces,
+      // una para el string de JavaScript (JSON.stringify) y otra para el
+      // atributo HTML (esc). Sin el esc, unas comillas en el nombre del servicio
+      // cerrarían el atributo onclick y romperían el botón.
       servBox.innerHTML = top.length ? top.map(s=>
-        `<button class="chipbtn sm ${state.servicioFiltro===s?'on':''}" onclick="setServicioFiltro('${esc(s).replace(/'/g,"\\'")}')">${esc(s)}</button>`
+        `<button type="button" class="chipbtn sm ${state.servicioFiltro===s?'on':''}" aria-pressed="${state.servicioFiltro===s}" onclick="setServicioFiltro(${esc(JSON.stringify(s))})">${esc(s)}</button>`
       ).join('') : '';
     } else {
       servBox.innerHTML = '';
@@ -990,8 +1123,7 @@ async function renderBuscar(){
   }
   if(state.servicioFiltro) results = results.filter(w=>(w.servicios||[]).some(s=>s.trim()===state.servicioFiltro));
 
-  if(q) results = results.filter(w=>w.nombre.toLowerCase().includes(q) || w.categoria.toLowerCase().includes(q)
-    || w.zona.toLowerCase().includes(q) || (w.servicios||[]).some(s=>s.toLowerCase().includes(q)));
+  if(q) results = results.filter(w=>coincideBusqueda(w, q));
   if(state.miUbicacion && state.radioFiltro){
     results = results.filter(w=>distanciaKm(state.miUbicacion, coordsForWorker(w)) <= state.radioFiltro);
   }
@@ -1002,7 +1134,7 @@ async function renderBuscar(){
   }
   if(state.filtroDisponibleAhora) results = results.filter(w=>w.disponible_ahora);
 
-  const orden = document.getElementById('buscar-orden') ? document.getElementById('buscar-orden').value : 'relevancia';
+  const orden = selectOrden ? selectOrden.value : 'relevancia';
   if(orden==='precio-asc') results = results.slice().sort((a,b)=>a.tarifa-b.tarifa);
   if(orden==='precio-desc') results = results.slice().sort((a,b)=>b.tarifa-a.tarifa);
   if(orden==='calificacion') results = results.slice().sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0));
@@ -1012,20 +1144,51 @@ async function renderBuscar(){
     );
   }
 
-  const box = document.getElementById('buscar-results');
-  box.innerHTML = results.length ? results.map(w=>workerCardHTML(w,{comparador:true})).join('') : `<div class="empty-note">No encontramos trabajadores con ese criterio. Prueba con otra categoría o término.</div>`;
+  if(box) box.innerHTML = results.length ? results.map(w=>workerCardHTML(w,{comparador:true})).join('') : `<div class="empty-note">No encontramos trabajadores con ese criterio. Prueba con otra categoría o término.</div>`;
   renderComparadorBar();
-  const summary = document.getElementById('buscar-summary');
-  if(summary){
-    const tarifas = results.map(w=>Number(w.tarifa)||0).filter(Boolean);
-    const minTarifa = tarifas.length ? Math.min(...tarifas) : 0;
-    const verificados = results.filter(w=>w.verificado).length;
-    summary.innerHTML = `<span>${results.length} ${results.length===1?'resultado':'resultados'}</span>
-      <span>${verificados} verificados</span>
-      <span>${minTarifa ? 'Desde '+fmtCOP(minTarifa) : 'Sin tarifas'}</span>`;
-  }
+  renderResumenBuscar(results, q);
   state.resultadosBuscar = results;
   if(state.vistaBuscar==='mapa') initMapaBuscar(results);
+}
+// Resumen de resultados + filtros activos. Los filtros se muestran acá (y no
+// repartidos por la interfaz) para que en celular se entienda por qué la lista
+// devolvió pocos resultados y se puedan quitar de a uno.
+function renderResumenBuscar(results, q){
+  const summary = document.getElementById('buscar-summary');
+  if(!summary) return;
+  const tarifas = results.map(w=>Number(w.tarifa)||0).filter(Boolean);
+  const minTarifa = tarifas.length ? Math.min(...tarifas) : 0;
+  const verificados = results.filter(w=>w.verificado).length;
+
+  const activos = [];
+  if(state.catFiltro) activos.push({tipo:'cat', label:state.catFiltro});
+  if(state.servicioFiltro) activos.push({tipo:'servicio', label:state.servicioFiltro});
+  if(state.filtroDisponibleAhora) activos.push({tipo:'disponible', label:'Disponible ahora'});
+  if(state.radioFiltro) activos.push({tipo:'radio', label:`Hasta ${state.radioFiltro} km`});
+  if(q) activos.push({tipo:'texto', label:`“${q}”`});
+
+  const filtrosHTML = activos.length
+    ? `<span>Filtros: ${activos.map(a=>esc(a.label)).join(' · ')}
+        <button type="button" class="link-btn" style="margin-left:6px;" onclick="limpiarFiltrosBuscar()">Limpiar</button></span>`
+    : '';
+
+  summary.innerHTML = `<span>${results.length} ${results.length===1?'resultado':'resultados'}</span>
+    <span>${verificados} verificados</span>
+    <span>${minTarifa ? 'Desde '+fmtCOP(minTarifa) : 'Sin tarifas'}</span>
+    ${filtrosHTML}`;
+}
+function limpiarFiltrosBuscar(){
+  state.catFiltro = null;
+  state.servicioFiltro = null;
+  state.filtroDisponibleAhora = false;
+  state.radioFiltro = null;
+  const inputTexto = document.getElementById('buscar-text');
+  if(inputTexto) inputTexto.value = '';
+  const radio = document.getElementById('buscar-radio');
+  if(radio) radio.value = '';
+  const orden = document.getElementById('buscar-orden');
+  if(orden) orden.value = 'relevancia';
+  renderBuscar();
 }
 function setCatFiltro(cat){ state.catFiltro = cat || null; state.servicioFiltro = null; renderBuscar(); }
 function setServicioFiltro(s){ state.servicioFiltro = state.servicioFiltro===s ? null : s; renderBuscar(); }
@@ -1076,8 +1239,16 @@ async function verComparador(){
 }
 function setVistaBuscar(vista){
   state.vistaBuscar = vista;
-  document.getElementById('btn-vista-lista').classList.toggle('on', vista==='lista');
-  document.getElementById('btn-vista-mapa').classList.toggle('on', vista==='mapa');
+  const btnLista = document.getElementById('btn-vista-lista');
+  const btnMapa = document.getElementById('btn-vista-mapa');
+  if(btnLista){
+    btnLista.classList.toggle('on', vista==='lista');
+    btnLista.setAttribute('aria-pressed', String(vista==='lista'));
+  }
+  if(btnMapa){
+    btnMapa.classList.toggle('on', vista==='mapa');
+    btnMapa.setAttribute('aria-pressed', String(vista==='mapa'));
+  }
   document.getElementById('buscar-results').classList.toggle('hidden', vista==='mapa');
   document.getElementById('buscar-mapa-box').classList.toggle('hidden', vista!=='mapa');
   if(vista==='mapa') initMapaBuscar(state.resultadosBuscar||[]);
@@ -1219,10 +1390,13 @@ async function irAAgendar(workerId){
   state.workerActual = workerId; state.diaSel=null; state.horaSel=null; state.calMonthOffset=0; state.citaReagendar=null;
   nav('agendar');
   const w = await obtenerPerfil(workerId);
-  if(!w){ document.getElementById('agendar-worker-summary').innerHTML = `<div class="empty-note">No encontramos ese trabajador.</div>`; return; }
-  document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre, w.foto_url)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
+  state.workerPerfil = w || null;
+  state.workerPerfilError = !w;
+  if(!w){ document.getElementById('agendar-worker-summary').innerHTML = `<div class="empty-note">No encontramos ese trabajador.</div>`; }
+  else document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre, w.foto_url)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
   document.getElementById('agendar-titulo').textContent = 'Agendar cita';
   document.getElementById('btn-confirmar-cita').textContent = 'Confirmar cita';
+  elegirPrimerDiaDisponible();
   renderCalendario();
   renderSlots();
 }
@@ -1234,10 +1408,13 @@ async function reagendarCita(citaId){
   state.workerActual = c.trabajadorId; state.diaSel=null; state.horaSel=null; state.calMonthOffset=0;
   nav('agendar');
   const w = await obtenerPerfil(c.trabajadorId);
-  if(!w){ document.getElementById('agendar-worker-summary').innerHTML = `<div class="empty-note">No encontramos ese trabajador.</div>`; return; }
-  document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre, w.foto_url)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
+  state.workerPerfil = w || null;
+  state.workerPerfilError = !w;
+  if(!w){ document.getElementById('agendar-worker-summary').innerHTML = `<div class="empty-note">No encontramos ese trabajador.</div>`; }
+  else document.getElementById('agendar-worker-summary').innerHTML = `${avatarHTML(w.nombre, w.foto_url)}<div><div style="font-weight:600; color:var(--navy); font-size:14px;">${esc(w.nombre)}</div><div style="font-size:12px; color:var(--ink-soft);">${esc(w.categoria)}</div></div>`;
   document.getElementById('agendar-titulo').textContent = 'Reagendar cita';
   document.getElementById('btn-confirmar-cita').textContent = 'Confirmar nuevo horario';
+  elegirPrimerDiaDisponible();
   renderCalendario();
   renderSlots();
 }
@@ -1251,44 +1428,91 @@ function calMesObjetivo(){
 function cambiarMesCalendario(delta){
   if(state.calMonthOffset+delta < 0) return;
   state.calMonthOffset += delta;
-  state.diaSel = null; state.horaSel = null;
+  // Al cambiar de mes se sugiere el primer día con atención, en vez de dejar al
+  // cliente con el calendario vacío y un mensaje de "elige un día".
+  elegirPrimerDiaDisponible();
   renderCalendario();
   renderSlots();
 }
-function renderCalendario(){
-  const now = new Date();
-  const target = calMesObjetivo();
-  document.getElementById('cal-month').textContent = `${MESES[target.getMonth()]} ${target.getFullYear()}`;
-  document.getElementById('cal-prev').disabled = state.calMonthOffset===0;
-  let startWeekday = target.getDay(); startWeekday = startWeekday===0?6:startWeekday-1; // Monday-first
-  const daysInMonth = new Date(target.getFullYear(), target.getMonth()+1, 0).getDate();
-  const esMesActual = state.calMonthOffset===0;
-  const today = now.getDate();
-
-  let html = ['L','M','X','J','V','S','D'].map(d=>`<div class="dow">${d}</div>`).join('');
-  for(let i=0;i<startWeekday;i++) html += `<div class="day muted"></div>`;
-  for(let d=1; d<=daysInMonth; d++){
-    const past = esMesActual && d < today;
-    const sel = state.diaSel===d;
-    html += `<div class="day ${past?'muted':''} ${sel?'sel':''}" ${past?'':`onclick="seleccionarDia(${d}, this)"`}>${d}</div>`;
-  }
-  document.getElementById('cal-grid').innerHTML = html;
+// La disponibilidad del trabajador ya está en memoria (state.workerPerfil): el
+// calendario se puede pintar y validar sin consultar la base en cada tecla.
+function disponibilidadDelTrabajador(){
+  return state.workerPerfil ? (state.workerPerfil.disponibilidad || {}) : null;
 }
-function seleccionarDia(d, el){
+function celdasDelMesActual(){
+  const target = calMesObjetivo();
+  return calendarioMes(target.getFullYear(), target.getMonth(), new Date(), disponibilidadDelTrabajador());
+}
+function elegirPrimerDiaDisponible(){
+  const sugerido = primerDiaDisponible(celdasDelMesActual(), new Date());
+  state.diaSel = sugerido;
+  state.horaSel = null;
+}
+function renderCalendario(){
+  const target = calMesObjetivo();
+  const monthEl = document.getElementById('cal-month');
+  if(monthEl) monthEl.textContent = `${MESES[target.getMonth()]} ${target.getFullYear()}`;
+  const prevBtn = document.getElementById('cal-prev');
+  if(prevBtn) prevBtn.disabled = state.calMonthOffset===0;
+
+  const celdas = celdasDelMesActual();
+  let html = ['L','M','X','J','V','S','D'].map(d=>`<div class="dow" aria-hidden="true">${d}</div>`).join('');
+  html += celdas.map(c=>{
+    if(!c.dia) return `<div class="day muted" aria-hidden="true"></div>`;
+    const clases = ['day', c.muted?'muted':'', c.closed?'closed':'', state.diaSel===c.dia?'sel':''].filter(Boolean).join(' ');
+    if(!c.open) return `<div class="${clases}" aria-hidden="true">${c.dia}</div>`;
+    const etiqueta = `Día ${c.dia} de ${MESES[target.getMonth()]}`;
+    const marcado = state.diaSel===c.dia ? 'true' : 'false';
+    // Es un botón real (no un div con onclick) para que se pueda elegir con
+    // teclado y lo anuncie un lector de pantalla.
+    return `<button type="button" class="${clases}" data-dia="${c.dia}" role="radio" aria-checked="${marcado}" aria-label="${esc(etiqueta)}" onclick="seleccionarDia(${c.dia})">${c.dia}</button>`;
+  }).join('');
+  const grid = document.getElementById('cal-grid');
+  if(grid){
+    grid.setAttribute('aria-busy', 'false');
+    grid.innerHTML = html;
+  }
+  actualizarAvisoCalendario(celdas, target);
+}
+// Aviso bajo el calendario: explica por qué hay días bloqueados, para que no
+// parezca que la app está rota.
+function actualizarAvisoCalendario(celdas, target){
+  const aviso = document.getElementById('cal-aviso');
+  if(!aviso) return;
+  if(!state.workerPerfil){
+    aviso.innerHTML = state.workerPerfilError
+      ? `<div class="msg err">No pudimos cargar la agenda de este trabajador. <button type="button" class="link-btn" onclick="irAAgendar('${esc(state.workerActual||'')}')">Reintentar</button></div>`
+      : '';
+    return;
+  }
+  if(celdas.some(c=>c.closed)){
+    aviso.innerHTML = `<p class="cal-note">Los días en gris son los que ${esc((state.workerPerfil.nombre||'').split(' ')[0] || 'este profesional')} no atiende según su disponibilidad semanal.</p>`;
+  } else {
+    aviso.innerHTML = '';
+  }
+}
+function seleccionarDia(d){
   state.diaSel = d; state.horaSel = null;
-  document.querySelectorAll('#cal-grid .day').forEach(x=>x.classList.remove('sel'));
-  el.classList.add('sel');
+  document.querySelectorAll('#cal-grid .day[data-dia]').forEach(x=>{
+    const sel = Number(x.dataset.dia)===d;
+    x.classList.toggle('sel', sel);
+    x.setAttribute('aria-checked', String(sel));
+  });
   renderSlots();
 }
 async function renderSlots(){
   const grid = document.getElementById('slot-grid');
+  if(!grid) return;
   if(!state.diaSel){
-    grid.innerHTML = `<div class="empty-note" style="padding:16px 0;">Elige primero un día en el calendario.</div>`;
+    const diaCeldas = celdasDelMesActual().filter(c=>c.open).length;
+    grid.innerHTML = diaCeldas
+      ? `<div class="empty-note" style="padding:16px 0;">Elige un día en el calendario para ver los horarios disponibles.</div>`
+      : `<div class="empty-note" style="padding:16px 0;">Este mes no tiene días con atención. Probá con el mes siguiente.</div>`;
     return;
   }
   const target = calMesObjetivo();
   const dia = diaSemanaDeFecha(new Date(target.getFullYear(), target.getMonth(), state.diaSel));
-  const w = await obtenerPerfil(state.workerActual);
+  const w = state.workerPerfil || await obtenerPerfil(state.workerActual);
   if(!w){ grid.innerHTML = `<div class="empty-note" style="padding:16px 0;">No encontramos ese trabajador.</div>`; return; }
   const hoy = new Date();
   const esHoy = state.calMonthOffset===0 && state.diaSel===hoy.getDate();
@@ -1303,15 +1527,23 @@ async function renderSlots(){
     grid.innerHTML = `<div class="empty-note" style="padding:16px 0;">${esc(w.nombre.split(' ')[0])} no atiende ese día. Elige otro día en el calendario.</div>`;
     return;
   }
+  // Solo se pintan los horarios que el trabajador realmente atiende ese día: los
+  // que no, se muestran deshabilitados (en vez de ocultarlos) para que se vea de
+  // un vistazo la agenda completa del día.
   grid.innerHTML = HORAS_DISPONIBLES.map(h=>{
     const activo = disponibles.includes(h);
-    return `<div class="slot ${state.horaSel===h?'sel':''} ${activo?'':'muted'}" ${activo?`onclick="seleccionarHora('${h}', this)"`:''}>${h}</div>`;
+    const sel = state.horaSel===h && activo;
+    if(!activo) return `<button type="button" class="slot muted" disabled aria-label="${esc(h)} — no disponible">${h}</button>`;
+    return `<button type="button" class="slot ${sel?'sel':''}" role="radio" aria-checked="${sel}" onclick="seleccionarHora(${esc(JSON.stringify(h))})">${h}</button>`;
   }).join('');
 }
-function seleccionarHora(h, el){
+function seleccionarHora(h){
   state.horaSel = h;
-  document.querySelectorAll('#slot-grid .slot').forEach(x=>x.classList.remove('sel'));
-  el.classList.add('sel');
+  document.querySelectorAll('#slot-grid .slot').forEach(x=>{
+    const sel = x.textContent.trim()===h;
+    x.classList.toggle('sel', sel);
+    if(x.getAttribute('role')==='radio') x.setAttribute('aria-checked', String(sel));
+  });
 }
 async function confirmarCita(){
   const msg = document.getElementById('agendar-msg');
@@ -1321,11 +1553,12 @@ async function confirmarCita(){
   const btn = document.getElementById('btn-confirmar-cita');
   await conCargando(btn, 'Confirmando...', async () => {
     const target = calMesObjetivo();
-    const mesesLower = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-    const anioSufijo = target.getFullYear()!==new Date().getFullYear() ? ` de ${target.getFullYear()}` : '';
-    const fecha = `${state.diaSel} de ${mesesLower[target.getMonth()]}${anioSufijo}`;
-    const dia = diaSemanaDeFecha(new Date(target.getFullYear(), target.getMonth(), state.diaSel));
-    const w = await obtenerPerfil(state.workerActual);
+    const fechaDate = new Date(target.getFullYear(), target.getMonth(), state.diaSel);
+    // El año solo se escribe en la columna `fecha` cuando no es el año en curso
+    // (mismo formato de siempre: "15 de agosto" / "15 de agosto de 2027").
+    const fecha = formatearFechaCita(fechaDate, target.getFullYear()!==new Date().getFullYear());
+    const dia = diaSemanaDeFecha(fechaDate);
+    const w = state.workerPerfil || await obtenerPerfil(state.workerActual);
     if(!w){ msg.innerHTML = `<div class="msg err">No encontramos ese trabajador.</div>`; return; }
     const disponibles = horasDisponiblesDia(w.disponibilidad, dia);
     if(!disponibles.includes(state.horaSel)){
@@ -1609,12 +1842,12 @@ async function renderIngresos(){
   const box = document.getElementById('work-ingresos');
   if(!u || u.tipo!=='trabajador'){ box.innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tus ingresos.</div>`; return; }
   box.innerHTML = `<div class="empty-note">Cargando...</div>`;
-  const { data } = await sb.from('citas').select('fecha, monto').eq('trabajador_id', u.id).eq('pago', 'pagado');
+  const { data } = await sb.from('citas').select('fecha, monto, created_at').eq('trabajador_id', u.id).eq('pago', 'pagado');
   const pagos = data || [];
   const total = pagos.reduce((a,c)=>a+(c.monto||0), 0);
   const porMes = new Map(); // "AAAA-MM · Mes AAAA" -> suma (la clave ordena bien y se ve linda)
   pagos.forEach(c=>{
-    const fecha = parseFechaHoraCita(c.fecha, '12:00 pm');
+    const fecha = parseFechaHoraCita(c.fecha, '12:00 pm', c.created_at);
     const clave = fecha ? `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')} · ${MESES[fecha.getMonth()]} ${fecha.getFullYear()}` : '0000 · Sin fecha';
     porMes.set(clave, (porMes.get(clave)||0) + (c.monto||0));
   });
@@ -1860,22 +2093,8 @@ async function enviarReporte(citaId, btn){
 }
 
 /* ---------------- CALENDARIO PERSONAL (.ics) ---------------- */
-// La fecha se guarda como texto en español (ej. "15 de agosto" o "15 de
-// agosto de 2027"); hay que revertir ese formato a un Date real para el evento.
-function parseFechaHoraCita(fecha, hora){
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const m = (fecha||'').match(/^(\d+) de (\w+)(?: de (\d+))?$/i);
-  if(!m) return null;
-  const dia = Number(m[1]);
-  const mes = meses.indexOf(m[2].toLowerCase());
-  if(mes<0) return null;
-  const anio = m[3] ? Number(m[3]) : new Date().getFullYear();
-  const hm = (hora||'').match(/^(\d+):(\d+)\s*(am|pm)$/i);
-  if(!hm) return null;
-  let h = Number(hm[1]) % 12;
-  if(/pm/i.test(hm[3])) h += 12;
-  return new Date(anio, mes, dia, h, Number(hm[2]));
-}
+// parseFechaHoraCita y formatearFechaCita viven en js/logica.js (puras,
+// testeadas con node --test) y quedan disponibles acá como globales.
 function icsFecha(d){
   const p = n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`;
@@ -1889,7 +2108,7 @@ async function descargarIcs(citaId){
   const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
   const c = normalizarCita(citaRaw);
   if(!c) return;
-  const inicio = parseFechaHoraCita(c.fecha, c.hora);
+  const inicio = parseFechaHoraCita(c.fecha, c.hora, c.created_at);
   if(!inicio){ mostrarToast('No se pudo generar el evento de calendario.', 'err'); return; }
   const fin = new Date(inicio.getTime() + 60*60*1000); // asume 1 hora de duración
   const w = await obtenerPerfil(c.trabajadorId);
@@ -2138,25 +2357,9 @@ async function renderTrabajo(){
   renderSugerenciasServicios();
 }
 
-// Pura y testeable: no toca el DOM, solo evalúa el perfil recibido. `anchor`
-// es el id del elemento al que hay que llevar al trabajador para completar
-// ese punto (ver irACampoPerfil).
-function calcularCompletitudPerfil(w){
-  if(!w) return { porcentaje: 0, faltantes: [] };
-  const items = [
-    { ok: !!w.foto_url, label: 'Subí una foto de perfil', anchor: 'wp-foto-btn' },
-    { ok: !!(w.galeria_fotos && w.galeria_fotos.length), label: 'Agregá al menos una foto de trabajos anteriores', anchor: 'wp-galeria-btn' },
-    { ok: !!(w.servicios && w.servicios.length), label: 'Contá qué servicios ofrecés', anchor: 'wp-servicios' },
-    { ok: !!(w.zona && w.zona !== 'Sin definir'), label: 'Indicá la zona donde trabajás', anchor: 'wp-zona' },
-    { ok: Object.values(w.disponibilidad || {}).some(horas => Array.isArray(horas) && horas.length > 0), label: 'Configurá tu disponibilidad semanal', anchor: 'wp-disponibilidad' },
-    { ok: !!(w.verificado || w.verificacionPendiente), label: 'Solicitá la verificación de tu identidad', anchor: 'wp-verif-btn' },
-  ];
-  const completos = items.filter(i => i.ok).length;
-  return {
-    porcentaje: Math.round((completos / items.length) * 100),
-    faltantes: items.filter(i => !i.ok),
-  };
-}
+// Pura y testeable: no toca el DOM, solo evalúa el perfil recibido (ver
+// calcularCompletitudPerfil en js/logica.js). `anchor` es el id del elemento al
+// que hay que llevar al trabajador para completar ese punto (ver irACampoPerfil).
 function irACampoPerfil(anchorId){
   const el = document.getElementById(anchorId);
   if(!el) return;
@@ -2724,8 +2927,25 @@ async function renderEstadisticas(){
 }
 
 /* ---------------- INIT ---------------- */
+// Buscadores: el de la home filtra los destacados en el momento (respuesta
+// visible sin cambiar de pantalla) y el de Buscar filtra la grilla. Se usa
+// 'input' en vez del onclick/oninput inline para poder esperar unos milisegundos
+// y no re-renderizar en cada tecla.
+function conectarBuscadores(){
+  const home = document.getElementById('home-search');
+  if(home) home.addEventListener('input', buscarDesdeHomeEnVivo);
+  const buscar = document.getElementById('buscar-text');
+  if(buscar){
+    let t = null;
+    buscar.addEventListener('input', ()=>{
+      clearTimeout(t);
+      t = setTimeout(renderBuscar, ESPERA_BUSQUEDA_MS);
+    });
+  }
+}
 (async function initApp(){
   applyTheme(loadTheme());
+  conectarBuscadores();
   // El enlace de recuperación de contraseña de Supabase redirige aquí mismo con
   // `type=recovery` en el hash; hay que mostrar el formulario de nueva contraseña
   // en vez de la ruta normal (y no tratar ese hash como una vista inválida).
