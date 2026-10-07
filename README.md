@@ -6,10 +6,11 @@ Plataforma web para conectar clientes con trabajadores independientes de servici
 
 - Registro e inicio de sesión (cliente / trabajador)
 - Búsqueda y filtro de trabajadores por categoría, texto, precio o calificación
+- Buscador de la portada con filtrado en vivo (sin salir de la home)
 - Mapa de la zona de cada trabajador y mapa de conjunto en Buscar (OpenStreetMap, sin API key)
 - Perfil de trabajador con calificaciones, reseñas y distintivo de verificado
 - Favoritos: los clientes pueden guardar trabajadores
-- Agendamiento de citas (calendario y horarios)
+- Agendamiento de citas (calendario que marca los días sin atención y horarios)
 - Chat simple por cita entre cliente y trabajador
 - Pago por transferencia con comprobante (el trabajador lo confirma al recibirlo)
 - Comprobante de la cita descargable/imprimible
@@ -19,6 +20,16 @@ Plataforma web para conectar clientes con trabajadores independientes de servici
 - Panel del cliente: seguimiento, calificación, pago y reporte de citas
 - Panel del trabajador: gestión de solicitudes, chat, perfil profesional y solicitud de verificación
 - Panel de administrador: gestión de usuarios, verificación de trabajadores, reportes y estadísticas
+- Accesibilidad: navegación por teclado, regiones vivas, diálogos con foco retenido y
+  página propia con el estado de accesibilidad (`#/accesibilidad`)
+
+## Accesibilidad
+
+La app apunta a WCAG 2.1 AA. Lo que ya está cubierto: navegación completa por teclado
+(el calendario y los horarios son botones reales con `aria-label` y `role="radio"`), enlace
+"saltar al contenido", regiones vivas (`role="status"`/`aria-live`) para resultados y avisos,
+diálogos que retienen el foco y lo devuelven al cerrarse, y etiquetas ocultas (`.sr-only`)
+en los campos de búsqueda. Las limitaciones conocidas están publicadas en `#/accesibilidad`.
 
 ## Estructura del proyecto
 
@@ -28,10 +39,33 @@ Plataforma web para conectar clientes con trabajadores independientes de servici
 │   └── styles.css          → estilos
 ├── js/
 │   ├── supabase-config.js  → URL y anon key del proyecto de Supabase
-│   └── app.js               → lógica de la aplicación
+│   ├── logica.js            → funciones puras (fechas, disponibilidad, precios,
+│   │                          calificaciones, completitud del perfil)
+│   └── app.js               → lógica de la aplicación (DOM, Supabase, vistas)
+├── tests/
+│   ├── logica.test.mjs      → tests de las funciones puras
+│   ├── app-dom.test.mjs     → la app corriendo en un DOM mínimo (ver abajo)
+│   ├── dom-minimo.mjs       → DOM mínimo para ejecutar el render sin navegador
+│   └── run-local.mjs        → runner alternativo cuando `node --test` no puede
+│                              lanzar su proceso hijo
 └── supabase/
     └── schema.sql          → tablas, políticas de seguridad (RLS) y funciones
 ```
+
+## Tests
+
+```bash
+node --test tests/          # las dos suites (requiere poder lanzar procesos hijo)
+node tests/run-local.mjs    # solo las funciones puras, sin proceso hijo
+node tests/app-dom.test.mjs # la app completa en un DOM mínimo
+```
+
+`tests/app-dom.test.mjs` carga `index.html` en un DOM mínimo propio
+(`tests/dom-minimo.mjs`), inyecta un doble de Supabase y ejecuta `js/app.js` como
+lo haría el navegador. Sirve para verificar lo que un test unitario no ve: que la
+app arranque sin excepciones y que el render produzca las clases, atributos y
+textos que esperan el CSS y la accesibilidad. No reemplaza una pasada visual por
+el sitio (no aplica CSS ni calcula layout), pero sí comprueba el comportamiento.
 
 ## Cómo probarlo localmente
 
