@@ -831,7 +831,7 @@ function proCardHTML(w){
     <div class="pro-top">
       <div class="pro-photo">${avatarHTML(w.nombre, w.foto_url)}</div>
       <div class="pro-body">
-        <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Verificado">✓</span>':''}</div>
+        <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}${w.antecedentes_verificado?' <span class="verif-badge" title="Antecedentes judiciales verificados">🛡️</span>':''}</div>
         <div class="pro-cat">${esc(w.categoria || '')}</div>
         <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
         <div class="pro-loc">${ICONO_UBICACION}${esc(w.zona || 'Ibagué')}</div>
@@ -867,7 +867,7 @@ function workerCardHTML(w, opts={}){
         ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
       </div>
       <div class="pro-body">
-        <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Verificado">✓</span>':''}</div>
+        <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}${w.antecedentes_verificado?' <span class="verif-badge" title="Antecedentes judiciales verificados">🛡️</span>':''}</div>
         <div class="pro-cat">${esc(w.categoria || '')}${w.zona?` · ${esc(w.zona)}`:''}</div>
         <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
         ${(insignias || pills) ? `<div class="pro-pills">${insignias}${pills}</div>` : ''}
@@ -1513,7 +1513,7 @@ async function verPerfil(workerId){
         <div class="card">
           <div class="profile-header">
             ${avatarHTML(w.nombre, w.foto_url)}
-            <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Verificado">✓ Verificado</span>':''} ${w.disponible_ahora?`<span class="rating-pill disp-ahora" style="vertical-align:middle;">${ICONO_DISPONIBLE}Disponible ahora</span>`:''} ${insignias}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
+            <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Identidad verificada">✓ Identidad</span>':''} ${w.antecedentes_verificado?'<span class="verif-badge" title="Antecedentes judiciales verificados">🛡️ Antecedentes</span>':''} ${w.disponible_ahora?`<span class="rating-pill disp-ahora" style="vertical-align:middle;">${ICONO_DISPONIBLE}Disponible ahora</span>`:''} ${insignias}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
             ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
             <button class="icon-btn" style="color:var(--navy); border-color:var(--line);" aria-label="Compartir perfil" onclick="compartirPerfil('${w.id}')">🔗</button>
           </div>
@@ -2466,6 +2466,11 @@ async function renderTrabajo(){
     : u.verificacion_rechazada
       ? `<span class="status-pill status-rechazada">Rechazada</span> <button id="wp-verif-btn" class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Volver a solicitar</button>`
       : `<button id="wp-verif-btn" class="btn btn-outline" onclick="mostrarFormularioVerificacion()">Solicitar verificación</button>`;
+  const antecedentesBadge = u.antecedentes_verificado ? `<span class="verif-badge">✓ Antecedentes verificados</span>`
+    : u.antecedentes_pendiente ? `<span class="status-pill status-pendiente">Revisión pendiente</span>`
+    : u.antecedentes_rechazado
+      ? `<span class="status-pill status-rechazada">Rechazado</span> <button id="wp-antecedentes-btn" class="btn btn-outline" onclick="mostrarFormularioAntecedentes()">Volver a solicitar</button>`
+      : `<button id="wp-antecedentes-btn" class="btn btn-outline" onclick="mostrarFormularioAntecedentes()">Solicitar verificación</button>`;
 
   state.wpDisponibilidad = JSON.parse(JSON.stringify(u.disponibilidad || disponibilidadPorDefecto()));
   // currentUser() no trae las reseñas (cargarPerfilActual no las selecciona); se piden aparte para el panel.
@@ -2528,6 +2533,18 @@ async function renderTrabajo(){
         <input type="file" id="wp-doc-input" accept="image/*,application/pdf">
         <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="solicitarVerificacion(this)">Enviar solicitud</button>
         <div id="wp-verif-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 10px; padding-top:16px; border-top:1px solid var(--line);">
+        <h3 style="font-size:15px;">Antecedentes judiciales</h3>
+        ${antecedentesBadge}
+      </div>
+      <p style="font-size:12px; color:var(--ink-soft); margin:0 0 14px;">Insignia aparte de la verificación de identidad. Sacá tu certificado gratis en <a href="https://antecedentes.policia.gov.co" target="_blank" rel="noopener">antecedentes.policia.gov.co</a> y subilo acá.</p>
+      ${u.antecedentes_rechazado && u.antecedentes_motivo_rechazo ? `<div class="msg err" style="margin-bottom:12px;">Rechazado: ${esc(u.antecedentes_motivo_rechazo)}. Corregí el documento y volvé a intentarlo.</div>` : ''}
+      <div id="antecedentes-panel" class="hidden" style="margin-bottom:16px; padding:14px; border:1.5px dashed var(--line); border-radius:12px;">
+        <label for="wp-antecedentes-input" style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Certificado (foto o PDF)</label>
+        <input type="file" id="wp-antecedentes-input" accept="image/*,application/pdf">
+        <button type="button" class="btn btn-primary" style="margin-top:10px;" onclick="solicitarVerificacionAntecedentes(this)">Enviar certificado</button>
+        <div id="wp-antecedentes-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
       </div>
       <div class="field"><label for="wp-cat">Categoría</label>
         <select id="wp-cat" onchange="renderSugerenciasServicios()">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
@@ -2697,6 +2714,47 @@ async function solicitarVerificacion(btn){
     }).eq('id', u.id);
     if(updErr){
       if(msgEl) msgEl.innerHTML = `<div class="msg err">El documento se subió, pero no se pudo registrar la solicitud: ${esc(updErr.message)}</div>`;
+      return;
+    }
+    invalidarPerfil(u.id);
+    renderTrabajo();
+  });
+}
+function mostrarFormularioAntecedentes(){
+  const panel = document.getElementById('antecedentes-panel');
+  if(panel) panel.classList.toggle('hidden');
+}
+async function solicitarVerificacionAntecedentes(btn){
+  const u = currentUser();
+  const input = document.getElementById('wp-antecedentes-input');
+  const msgEl = document.getElementById('wp-antecedentes-msg');
+  const file = input && input.files[0];
+  if(!file){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">Adjunta tu certificado antes de enviar la solicitud.</div>`;
+    return;
+  }
+  if(archivoDemasiadoGrande(file)){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">${MSG_ARCHIVO_GRANDE}</div>`;
+    return;
+  }
+  await conCargando(btn, 'Enviando...', async () => {
+    const ext = file.name.split('.').pop();
+    const path = `${u.id}/antecedentes-${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('verificaciones').upload(path, file, { upsert: true });
+    if(upErr){
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir el certificado: ${esc(upErr.message)}</div>`;
+      return;
+    }
+    const historial = [...(u.antecedentes_historial || []), { fecha: new Date().toISOString(), accion: 'solicitada' }];
+    const { error: updErr } = await sb.from('profiles').update({
+      antecedentes_pendiente: true,
+      antecedentes_doc_path: path,
+      antecedentes_rechazado: false,
+      antecedentes_motivo_rechazo: null,
+      antecedentes_historial: historial,
+    }).eq('id', u.id);
+    if(updErr){
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">El certificado se subió, pero no se pudo registrar la solicitud: ${esc(updErr.message)}</div>`;
       return;
     }
     invalidarPerfil(u.id);
@@ -2919,9 +2977,10 @@ async function renderAdmin(){
       <div class="admin-stat"><span>Citas</span><b>${(todasCitas||[]).length}</b><small>${citasPendientes} por responder</small></div>
       <div class="admin-stat"><span>Reportes</span><b>${reportesAbiertos}</b><small>Abiertos</small></div>
     </div>
-    <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Correo</th><th>Estado</th><th>Verificación</th><th>Historial</th><th>Acción</th></tr></thead><tbody>
+    <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Correo</th><th>Estado</th><th>Verificación</th><th>Antecedentes</th><th>Historial</th><th>Acción</th></tr></thead><tbody>
     ${others.map(x=>{
       let verifCell = '—';
+      let antecedentesCell = '—';
       if(x.tipo==='trabajador'){
         const verDoc = x.verificacionPendiente && x.verificacion_doc_path
           ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verDocumentoVerificacion('${esc(x.verificacion_doc_path)}')">Ver documento</button>` : '';
@@ -2934,6 +2993,13 @@ async function renderAdmin(){
           : x.verificacionPendiente ? `${verDoc}<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verificarTrabajador('${x.id}', this)">Verificar</button><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="rechazarVerificacion('${x.id}', this)">Rechazar</button>${historialIcono}`
           : x.verificacion_rechazada ? `<span class="status-pill status-rechazada" title="${esc(x.verificacion_motivo_rechazo||'')}">Rechazada</span>${historialIcono}`
           : `<span class="status-pill status-bloqueado">Sin solicitar</span>`;
+
+        const verDocAntecedentes = x.antecedentes_pendiente && x.antecedentes_doc_path
+          ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verDocumentoVerificacion('${esc(x.antecedentes_doc_path)}')">Ver documento</button>` : '';
+        antecedentesCell = x.antecedentes_verificado ? `<span class="verif-badge">✓ Verificados</span>`
+          : x.antecedentes_pendiente ? `${verDocAntecedentes}<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verificarAntecedentes('${x.id}', this)">Verificar</button><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="rechazarAntecedentes('${x.id}', this)">Rechazar</button>`
+          : x.antecedentes_rechazado ? `<span class="status-pill status-rechazada" title="${esc(x.antecedentes_motivo_rechazo||'')}">Rechazado</span>`
+          : `<span class="status-pill status-bloqueado">Sin solicitar</span>`;
       }
       const nCancel = cancelacionesPorUsuario.get(x.id) || 0;
       const nRep = reportesPorUsuario.get(x.id) || 0;
@@ -2942,6 +3008,7 @@ async function renderAdmin(){
       return `<tr><td>${esc(x.nombre)}</td><td>${x.tipo}</td><td>${esc(x.correo)}</td>
       <td><span class="status-pill status-${x.estado}">${x.estado}</span></td>
       <td>${verifCell}</td>
+      <td>${antecedentesCell}</td>
       <td>${historialCell}</td>
       <td><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="toggleEstadoUsuario('${x.id}', this)">${x.estado==='activo'?'Bloquear':'Activar'}</button></td></tr>`;
     }).join('')}
@@ -3016,6 +3083,47 @@ async function rechazarVerificacion(id, btn){
     invalidarPerfil(id);
     addNotificacion(u.id, `Tu verificación fue rechazada: ${motivo.trim()}. Podés corregir el documento y volver a solicitarla desde tu perfil.`);
     mostrarToast(`Verificación de ${u.nombre.split(' ')[0]} rechazada.`, 'ok');
+    renderAdmin();
+  });
+}
+async function verificarAntecedentes(id, btn){
+  const u = await obtenerPerfil(id);
+  if(!u) return;
+  await conCargando(btn, 'Verificando...', async () => {
+    const historial = [...(u.antecedentes_historial || []), { fecha: new Date().toISOString(), accion: 'aprobada' }];
+    const { error } = await sb.from('profiles').update({
+      antecedentes_verificado: true,
+      antecedentes_pendiente: false,
+      antecedentes_rechazado: false,
+      antecedentes_motivo_rechazo: null,
+      antecedentes_historial: historial,
+    }).eq('id', id);
+    if(error){ mostrarToast('No se pudo verificar los antecedentes. Intenta de nuevo.', 'err'); return; }
+    invalidarPerfil(id);
+    addNotificacion(u.id, 'Tus antecedentes judiciales fueron verificados. Ya se muestra el distintivo ✓ Antecedentes verificados.');
+    mostrarToast(`Antecedentes de ${u.nombre.split(' ')[0]} verificados.`, 'ok');
+    renderAdmin();
+  });
+}
+async function rechazarAntecedentes(id, btn){
+  const u = await obtenerPerfil(id);
+  if(!u) return;
+  const motivo = await pedirTextoModal('¿Por qué se rechaza? El trabajador va a ver este motivo.', {titulo:'Rechazar antecedentes', textoConfirmar:'Rechazar', placeholder:'Motivo del rechazo'});
+  if(motivo === null) return; // canceló el modal
+  if(!motivo.trim()){ mostrarToast('Escribí un motivo para rechazar.', 'err'); return; }
+  await conCargando(btn, 'Rechazando...', async () => {
+    const historial = [...(u.antecedentes_historial || []), { fecha: new Date().toISOString(), accion: 'rechazada', motivo: motivo.trim() }];
+    const { error } = await sb.from('profiles').update({
+      antecedentes_verificado: false,
+      antecedentes_pendiente: false,
+      antecedentes_rechazado: true,
+      antecedentes_motivo_rechazo: motivo.trim(),
+      antecedentes_historial: historial,
+    }).eq('id', id);
+    if(error){ mostrarToast('No se pudo rechazar. Intenta de nuevo.', 'err'); return; }
+    invalidarPerfil(id);
+    addNotificacion(u.id, `Tu certificado de antecedentes fue rechazado: ${motivo.trim()}. Podés corregirlo y volver a solicitarlo desde tu perfil.`);
+    mostrarToast(`Antecedentes de ${u.nombre.split(' ')[0]} rechazados.`, 'ok');
     renderAdmin();
   });
 }
