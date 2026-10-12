@@ -2021,7 +2021,7 @@ async function renderMisCitas(){
       let pagoPill;
       if(c.pago==='pagado') pagoPill = `<span class="status-pill status-activo">pagado</span>`;
       else if(c.pago==='declarado') pagoPill = `<span class="status-pill status-pendiente">esperando confirmación</span>`;
-      else if(c.estado==='aceptada' || c.estado==='completada') pagoPill = `<button class="btn btn-outline btn-xs" onclick="abrirDeclararPago('${c.id}')">Declarar pago</button>`;
+      else if(c.estado==='aceptada' || c.estado==='completada') pagoPill = `<button class="btn btn-outline btn-xs" onclick="abrirDeclararPago('${c.id}')">Pagar</button>`;
       else pagoPill = `<span class="status-pill status-pendiente">pago pendiente</span>`;
       return `<div class="cita-card">
         <div class="cc-head">
@@ -2138,17 +2138,34 @@ async function renderDeclararPagoPanel(){
   const w = cita ? await obtenerPerfil(cita.trabajadorId) : null;
   panel.innerHTML = `
     <div class="card" style="max-width:440px;">
-      <h3 style="font-size:15px; margin-bottom:10px;">Datos para pagarle a ${w?esc(w.nombre.split(' ')[0]):'tu trabajador'}</h3>
+      <h3 style="font-size:15px; margin-bottom:10px;">Pagar a ${w?esc(w.nombre.split(' ')[0]):'tu trabajador'}</h3>
+      <button type="button" class="btn btn-primary" style="width:100%;" id="btn-pagar-mp" onclick="pagarConMercadoPago()">💳 Pagar con tarjeta, Nequi o PSE</button>
+      <div id="pagar-mp-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
+      <p style="font-size:11px; color:var(--ink-soft); text-align:center; margin:16px 0;">— o pagale directo por transferencia —</p>
       <p style="font-size:13px; white-space:pre-wrap; background:var(--paper); padding:10px; border-radius:8px; margin-bottom:14px;">${w && w.datos_pago_texto ? esc(w.datos_pago_texto) : 'Este trabajador todavía no cargó sus datos de pago. Consultale directamente cómo prefiere que le transfieras.'}</p>
       <label for="comprobante-input" style="font-size:11px; font-family:'IBM Plex Mono'; letter-spacing:0.05em; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:8px;">Comprobante de la transferencia</label>
       <input type="file" id="comprobante-input" accept="image/*,application/pdf" onchange="previsualizarComprobante(this)">
       <div id="comprobante-preview" style="margin-top:10px;"></div>
       <div style="margin-top:12px; display:flex; gap:8px;">
-        <button type="button" class="btn btn-primary" id="btn-declarar-pago" onclick="declararPago()">Ya transferí, enviar comprobante</button>
+        <button type="button" class="btn btn-outline" id="btn-declarar-pago" onclick="declararPago()">Ya transferí, enviar comprobante</button>
         <button type="button" class="btn btn-outline" onclick="cerrarDeclararPago()">Cancelar</button>
       </div>
       <div id="declarar-pago-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
     </div>`;
+}
+async function pagarConMercadoPago(){
+  const citaId = state.citaPagar;
+  if(!citaId) return;
+  const btn = document.getElementById('btn-pagar-mp');
+  const msgEl = document.getElementById('pagar-mp-msg');
+  await conCargando(btn, 'Preparando pago...', async () => {
+    const { data, error } = await sb.functions.invoke('crear-preferencia-pago', { body: { cita_id: citaId } });
+    if(error || !data || !data.init_point){
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo iniciar el pago con Mercado Pago. Probá con la transferencia manual, o intentalo de nuevo en un momento.</div>`;
+      return;
+    }
+    window.location.href = data.init_point;
+  });
 }
 async function declararPago(){
   const citaId = state.citaPagar;
