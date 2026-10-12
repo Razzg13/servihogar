@@ -2161,7 +2161,14 @@ async function pagarConMercadoPago(){
   await conCargando(btn, 'Preparando pago...', async () => {
     const { data, error } = await sb.functions.invoke('crear-preferencia-pago', { body: { cita_id: citaId } });
     if(error || !data || !data.init_point){
-      if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo iniciar el pago con Mercado Pago. Probá con la transferencia manual, o intentalo de nuevo en un momento.</div>`;
+      // error.context es la Response cruda de la función: ahí viene el motivo
+      // real (ej. "El trabajador no tiene una tarifa válida configurada.") en
+      // vez de mostrar siempre el mismo mensaje genérico.
+      let detalle = '';
+      if(error && error.context && typeof error.context.text === 'function'){
+        try{ detalle = (await error.context.text()).trim(); }catch(e){ /* sin detalle disponible */ }
+      }
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo iniciar el pago con Mercado Pago${detalle ? ': '+esc(detalle) : ''}. Probá con la transferencia manual, o intentalo de nuevo en un momento.</div>`;
       return;
     }
     window.location.href = data.init_point;
