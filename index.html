@@ -85,28 +85,26 @@
   <section class="view active" id="v-home">
     <div class="home-hero">
       <div class="hh-txt">
-        <div class="hh-tag mono"><span class="hh-tag-dot"></span>Orden de servicio · Ibagué</div>
         <h1>Encuentra ayuda para tu hogar, <span class="hh-accent">cerca de ti.</span></h1>
-        <p>Profesionales confiables para cada tarea que necesites.</p>
+        <p>Profesionales verificados en Ibagué — compará, agendá y pagá con total confianza.</p>
         <form class="hh-search" role="search" onsubmit="event.preventDefault(); buscarDesdeHome();">
-          <label class="sr-only" for="home-search">Buscar un servicio o profesional</label>
-          <span class="hh-search-ic" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          </span>
-          <input id="home-search" placeholder="¿Qué servicio necesitas?" autocomplete="off">
-          <span class="hh-loc" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>
-            Ibagué
-          </span>
-          <button class="btn btn-primary" type="submit">Buscar profesionales</button>
+          <div class="hh-field">
+            <label class="sr-only" for="home-search">Buscar un servicio o profesional</label>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input id="home-search" placeholder="¿Qué servicio necesitas?" autocomplete="off">
+          </div>
+          <div class="hh-field hh-field-loc">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>
+            <span>Ibagué</span>
+          </div>
+          <button class="btn btn-primary" type="submit">Buscar</button>
         </form>
-        <div class="hh-trust" aria-label="Por qué elegir Hogandía">
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="t-green"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg> Profesionales verificados</span>
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="t-amber"><path d="M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.6-4.1 6.1-.6z"/></svg> Calificaciones reales</span>
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="t-orange"><path d="M12 20s-7-4.4-9.3-8.5C1 8 2.7 4.5 6 4.5c2 0 3.3 1.2 4 2.3.7-1.1 2-2.3 4-2.3 3.3 0 5 3.5 3.3 7C19 15.6 12 20 12 20z"/></svg> Atención cercana y confiable</span>
+        <div class="hh-stats" aria-label="Hogandía en números">
+          <div><b id="hh-stat-workers">—</b><span>Profesionales activos</span></div>
+          <div><b id="hh-stat-rating">—</b><span>Calificación promedio</span></div>
+          <div><b>100%</b><span>Identidad verificada</span></div>
         </div>
       </div>
-      <div class="hh-seam" aria-hidden="true"></div>
       <div class="hh-art" aria-hidden="true">
         <div class="hh-art-illo">
           <svg viewBox="0 0 480 360" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -144,6 +142,7 @@
             <path d="M240 150 l7 7 13 -14" stroke="#FFFFFF" stroke-width="5"/>
           </svg>
         </div>
+        <div class="hh-art-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg> Profesionales verificados</div>
       </div>
     </div>
 

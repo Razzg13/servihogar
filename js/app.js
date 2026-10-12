@@ -710,8 +710,8 @@ async function renderHome(){
   const catsBox = document.getElementById('home-cats');
   if(catsBox){
     const iconMas = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`;
-    catsBox.innerHTML = CATS.map((c,i)=>
-      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${esc(c.n)}')"><span class="svc-n mono">${String(i+1).padStart(2,'0')}</span><span class="ic-wrap">${iconSVG(c.n)}</span><span>${esc(c.n)}</span></button>`
+    catsBox.innerHTML = CATS.map(c=>
+      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${esc(c.n)}')"><span class="ic-wrap">${iconSVG(c.n)}</span><span>${esc(c.n)}</span></button>`
     ).join('') + `<button class="svc-card" onclick="nav('buscar')"><span class="ic-wrap">${iconMas}</span><span>Más</span></button>`;
   }
 
@@ -726,7 +726,17 @@ async function pintarDestacadosHome(){
   const q = textoBusquedaHome();
   try {
     const trabajadores = await cargarTrabajadores();
-    const destacados = trabajadores.filter(u=>u.estado==='activo')
+    const activos = trabajadores.filter(u=>u.estado==='activo');
+    const statWorkers = document.getElementById('hh-stat-workers');
+    const statRating = document.getElementById('hh-stat-rating');
+    if(statWorkers) statWorkers.textContent = activos.length || '—';
+    if(statRating){
+      const todasResenas = activos.flatMap(u=>u.resenas||[]);
+      statRating.textContent = todasResenas.length
+        ? `★ ${(todasResenas.reduce((a,r)=>a+r.estrellas,0)/todasResenas.length).toFixed(1)}`
+        : '—';
+    }
+    const destacados = activos
       .filter(u=>coincideBusqueda(u, q))
       .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,4);
     workersBox.innerHTML = destacados.length
@@ -778,7 +788,7 @@ function buscarDesdeHomeEnVivo(){
 function proCardHTML(w){
   const rating = avg(w.resenas);
   const n = (w.resenas || []).length;
-  return `<div class="pro-card ticket">
+  return `<div class="pro-card">
     <div class="pro-top">
       <div class="pro-photo">${avatarHTML(w.nombre, w.foto_url)}</div>
       <div class="pro-body">
@@ -788,7 +798,6 @@ function proCardHTML(w){
         <div class="pro-loc">${ICONO_UBICACION}${esc(w.zona || 'Ibagué')}</div>
       </div>
     </div>
-    <div class="perf"></div>
     <div class="pro-stub">
       <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
       <div class="pro-actions">
@@ -812,7 +821,7 @@ function workerCardHTML(w, opts={}){
     w.disponible_ahora ? `<span class="rating-pill disp-ahora">${ICONO_DISPONIBLE}Disponible ahora</span>` : '',
     distancia!==null ? `<span class="rating-pill dist">${ICONO_UBICACION}${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</span>` : '',
   ].filter(Boolean).join('');
-  return `<div class="pro-card pro-card--list ticket" role="button" tabindex="0" aria-label="Ver perfil de ${esc(w.nombre)}" onclick="verPerfil('${w.id}')">
+  return `<div class="pro-card pro-card--list" role="button" tabindex="0" aria-label="Ver perfil de ${esc(w.nombre)}" onclick="verPerfil('${w.id}')">
     <div class="pro-top">
       <div class="pro-photo">
         ${avatarHTML(w.nombre, w.foto_url)}
@@ -825,7 +834,6 @@ function workerCardHTML(w, opts={}){
         ${(insignias || pills) ? `<div class="pro-pills">${insignias}${pills}</div>` : ''}
       </div>
     </div>
-    <div class="perf"></div>
     <div class="pro-stub">
       <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
       <div class="pro-actions">
