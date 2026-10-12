@@ -2240,10 +2240,17 @@ async function rechazarComprobantePago(citaId, btn){
 async function renderIngresos(){
   const u = currentUser();
   const box = document.getElementById('work-ingresos');
-  if(!u || u.tipo!=='trabajador'){ box.innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tus ingresos.</div>`; return; }
+  if(!u || u.tipo!=='trabajador'){ box.innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tus estadísticas.</div>`; return; }
   box.innerHTML = `<div class="empty-note">Cargando...</div>`;
-  const { data } = await sb.from('citas').select('fecha, monto, created_at').eq('trabajador_id', u.id).eq('pago', 'pagado');
-  const pagos = data || [];
+  // Reusa el caché de renderTrabajo() (select('*') de las propias citas) en vez de
+  // pedirlo de nuevo; si por algún motivo todavía no se cargó (ej. se entra directo
+  // a esta pestaña), se pide acá como respaldo.
+  let citas = state.citasCacheTrabajador;
+  if(!citas){
+    const { data } = await sb.from('citas').select('*').eq('trabajador_id', u.id);
+    citas = (data||[]).map(normalizarCita);
+  }
+  const pagos = citas.filter(c=>c.pago==='pagado');
   const total = pagos.reduce((a,c)=>a+(c.monto||0), 0);
   const porMes = new Map(); // "AAAA-MM · Mes AAAA" -> suma (la clave ordena bien y se ve linda)
   pagos.forEach(c=>{
@@ -2252,14 +2259,31 @@ async function renderIngresos(){
     porMes.set(clave, (porMes.get(clave)||0) + (c.monto||0));
   });
   const filas = [...porMes.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
+
+  const completadas = citas.filter(c=>c.estado==='completada');
+  const calificaciones = citas.filter(c=>c.calificacion).map(c=>c.calificacion.estrellas);
+  const promedioCalif = calificaciones.length ? calificaciones.reduce((a,b)=>a+b,0)/calificaciones.length : null;
+  // Solo cuenta cancelaciones que el propio trabajador decidió (cancelada_por===su id),
+  // no las que canceló el cliente — es la tasa que refleja su propia confiabilidad.
+  const canceladasPropias = citas.filter(c=>c.estado==='cancelada' && c.cancelada_por===u.id).length;
+  const tasaCancelacion = citas.length ? Math.round((canceladasPropias/citas.length)*100) : 0;
+  const completadasPorCliente = new Map();
+  completadas.forEach(c=>{ completadasPorCliente.set(c.cliente_id, (completadasPorCliente.get(c.cliente_id)||0)+1); });
+  const clientesUnicos = completadasPorCliente.size;
+  const clientesRecurrentes = [...completadasPorCliente.values()].filter(n=>n>1).length;
+
   box.innerHTML = `
-    <div class="admin-summary" style="grid-template-columns:repeat(2,1fr); max-width:420px;">
+    <div class="admin-summary" style="grid-template-columns:repeat(2,1fr); max-width:620px;">
       <div class="admin-stat"><span>Total cobrado</span><b>${fmtCOP(total)}</b></div>
       <div class="admin-stat"><span>Servicios pagados</span><b>${pagos.length}</b></div>
+      <div class="admin-stat"><span>Citas completadas</span><b>${completadas.length}</b></div>
+      <div class="admin-stat"><span>Calificación promedio</span><b>${promedioCalif!==null?'★'+promedioCalif.toFixed(1):'—'}</b><small>${calificaciones.length} reseña${calificaciones.length===1?'':'s'}</small></div>
+      <div class="admin-stat"><span>Tasa de cancelación</span><b>${tasaCancelacion}%</b><small>${canceladasPropias} de ${citas.length} citas</small></div>
+      <div class="admin-stat"><span>Clientes recurrentes</span><b>${clientesRecurrentes}/${clientesUnicos}</b><small>con más de una cita</small></div>
     </div>
-    ${filas.length ? `<table><thead><tr><th>Mes</th><th>Ingresos</th></tr></thead><tbody>
+    ${filas.length ? `<h3 style="font-size:14px;margin:18px 0 10px;">Ingresos por mes</h3><table><thead><tr><th>Mes</th><th>Ingresos</th></tr></thead><tbody>
       ${filas.map(([clave, monto])=>`<tr><td>${esc(clave.split(' · ')[1])}</td><td>${fmtCOP(monto)}</td></tr>`).join('')}
-    </tbody></table>` : `<div class="empty-note">Todavía no registraste ningún pago.</div>`}`;
+    </tbody></table>` : `<div class="empty-note" style="margin-top:14px;">Todavía no registraste ningún pago.</div>`}`;
 }
 function abrirCalificar(id){
   const panel = document.getElementById('calificar-panel');
