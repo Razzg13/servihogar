@@ -761,7 +761,7 @@ async function renderHome(){
     const iconMas = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`;
     catsBox.innerHTML = CATS.map(c=>
       `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${esc(c.n)}')"><span class="ic-wrap">${iconSVG(c.n)}</span><span>${esc(c.n)}</span></button>`
-    ).join('') + `<button class="svc-card" onclick="nav('buscar')"><span class="ic-wrap">${iconMas}</span><span>Más</span></button>`;
+    ).join('') + `<button class="svc-card svc-card--more" onclick="nav('buscar')"><span class="ic-wrap">${iconMas}</span><span>Más</span></button>`;
   }
 
   await pintarDestacadosHome();
@@ -841,7 +841,7 @@ function proCardHTML(w){
     <div class="pro-top">
       <div class="pro-photo">${avatarHTML(w.nombre, w.foto_url)}</div>
       <div class="pro-body">
-        <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}${w.antecedentes_verificado?' <span class="verif-badge" title="Antecedentes judiciales verificados">🛡️</span>':''}</div>
+        <div class="pro-name"><span class="pro-name-text" title="${esc(w.nombre)}">${esc(w.nombre)}</span>${w.verificado?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}${w.antecedentes_verificado?' <span class="verif-badge" title="Antecedentes judiciales verificados">🛡️</span>':''}</div>
         <div class="pro-cat">${esc(w.categoria || '')}</div>
         <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
         <div class="pro-loc">${ICONO_UBICACION}${esc(w.zona || 'Ibagué')}</div>
@@ -877,7 +877,7 @@ function workerCardHTML(w, opts={}){
         ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
       </div>
       <div class="pro-body">
-        <div class="pro-name">${esc(w.nombre)}${w.verificado?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}${w.antecedentes_verificado?' <span class="verif-badge" title="Antecedentes judiciales verificados">🛡️</span>':''}</div>
+        <div class="pro-name"><span class="pro-name-text" title="${esc(w.nombre)}">${esc(w.nombre)}</span>${w.verificado?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}${w.antecedentes_verificado?' <span class="verif-badge" title="Antecedentes judiciales verificados">🛡️</span>':''}</div>
         <div class="pro-cat">${esc(w.categoria || '')}${w.zona?` · ${esc(w.zona)}`:''}</div>
         <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
         ${(insignias || pills) ? `<div class="pro-pills">${insignias}${pills}</div>` : ''}

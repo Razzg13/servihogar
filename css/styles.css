@@ -424,6 +424,11 @@
   .svc-card .ic{width:20px; height:20px; stroke-width:1.8;}
   .svc-card span{font-size:12.5px; font-weight:600; color:var(--navy); text-align:center;}
   .svc-card:active{transform:scale(0.97);}
+  /* "Más" no es una categoría real como las demás — se marca como la salida
+     a "ver todo" (fondo transparente, borde punteado) para que el grupo se
+     lea como "6 categorías + un atajo", no como 7 opciones del mismo peso. */
+  .svc-card--more{background:transparent; border-style:dashed; color:var(--ink-soft);}
+  .svc-card--more .ic-wrap{background:transparent; border:1.5px dashed var(--line); color:var(--ink-soft);}
   @media (hover:hover) and (pointer:fine){
     .svc-card:hover{border-color:var(--navy); box-shadow:var(--shadow);}
   }
@@ -443,13 +448,21 @@
   .pro-photo{width:66px; height:66px; border-radius:11px; overflow:hidden; background:var(--paper); flex-shrink:0;}
   .pro-photo .avatar{width:100%; height:100%; border-radius:0; font-size:22px;}
   .pro-body{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
-  .pro-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:var(--navy); display:flex; align-items:center; gap:5px;}
-  .pro-cat{font-size:12.5px; color:var(--ink-soft);}
+  /* Nombre truncado a una línea: un nombre de dos palabras largas (p.ej.
+     "Nicolás Quintero Rodríguez") no debe empujar precio/acciones más abajo
+     que en las tarjetas vecinas de la misma fila — el título completo queda
+     en el atributo title. */
+  .pro-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:var(--navy); display:flex; align-items:center; gap:5px; min-width:0;}
+  .pro-name-text{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
+  .pro-cat{font-size:12.5px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .pro-rating{font-size:12.5px; color:var(--navy); font-weight:600; margin-top:5px;}
   .pro-rating span{color:var(--ink-soft); font-weight:400;}
   .pro-loc{display:flex; align-items:center; font-size:12px; color:var(--ink-soft); margin-top:1px;}
   .pro-price{font-family:'IBM Plex Mono',monospace; font-size:14px; font-weight:700; color:var(--navy); margin-top:3px;}
-  .pro-stub{display:flex; flex-direction:column; gap:11px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);}
+  /* margin-top:auto (en vez de un valor fijo) ancla precio/acciones al pie de
+     la tarjeta, por si todavía queda alguna diferencia de alto entre tarjetas
+     de la misma fila (p.ej. "Sin calificaciones aún" vs "★ 5.0 (3 reseñas)"). */
+  .pro-stub{display:flex; flex-direction:column; gap:11px; margin-top:auto; padding-top:14px; border-top:1px solid var(--line);}
   .pro-stub .pro-price{margin-top:0;}
   .pro-actions{display:flex; gap:8px;}
   .pro-actions .btn{flex:1; font-size:12.5px; padding:9px 10px; text-align:center; border-radius:9px;}
@@ -479,7 +492,11 @@
   .step h3{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:14.5px; color:var(--navy);}
   .step p{font-size:12px; color:var(--ink-soft); line-height:1.45; max-width:24ch;}
 
-  .home-cta{background:var(--navy); border-radius:16px; padding:26px clamp(22px,3vw,38px); display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap;}
+  /* --navy se invierte a casi-blanco en modo oscuro (sigue siendo "color de
+     marca/encabezado" en ambos temas); esta franja necesita una superficie
+     que se quede oscura siempre, como el footer — por eso --navy-deep, no
+     --navy. Con --navy el texto blanco quedaba invisible en modo oscuro. */
+  .home-cta{background:var(--navy-deep); border-radius:16px; padding:26px clamp(22px,3vw,38px); display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap;}
   .home-cta-txt{display:flex; align-items:center; gap:15px; color:#fff;}
   .home-cta-txt svg{width:34px; height:34px; flex-shrink:0; color:var(--orange);}
   .home-cta-txt b{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16.5px; display:block;}
@@ -495,8 +512,11 @@
 
   @media (max-width:900px){
     .home-hero{grid-template-columns:1fr;}
-    .hh-txt{order:2; padding:26px 22px 30px;}
-    .hh-art{order:1; min-height:240px;}
+    /* Titular + buscador antes que la foto: en mobile angosto, hacer scrollear
+       una pantalla completa de foto antes de saber qué es Hogandia o poder
+       buscar es el peor momento para perder a alguien distraído. */
+    .hh-txt{order:1; padding:26px 22px 30px;}
+    .hh-art{order:2; min-height:240px;}
     .svc-row{grid-template-columns:repeat(4,1fr);}
     .pro-row{grid-template-columns:repeat(2,1fr);}
   }
