@@ -95,6 +95,11 @@ Deno.serve(async (req) => {
           unit_price: monto,
         }],
         external_reference: cita.id,
+        // Sin un payer explícito, Mercado Pago a veces rechaza la creación
+        // de la preferencia con un 403 genérico del motor de políticas
+        // (cuentas nuevas en etapa de prueba lo piden). Usamos el email del
+        // cliente autenticado, que ya validamos arriba con auth.getUser().
+        payer: userData.user.email ? { email: userData.user.email } : undefined,
         back_urls: {
           success: `${SITE_URL}/#/miscitas`,
           pending: `${SITE_URL}/#/miscitas`,
