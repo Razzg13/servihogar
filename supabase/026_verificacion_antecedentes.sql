@@ -57,12 +57,16 @@ $$;
 -- profiles_publicos (migración 021) expone "verificado" al directorio público
 -- a propósito; se agrega antecedentes_verificado con el mismo criterio, para
 -- poder mostrar el distintivo en las tarjetas y el perfil sin necesitar login.
+-- Va al FINAL de la lista a propósito: "create or replace view" no permite
+-- reordenar ni insertar columnas en el medio de una vista que ya existe
+-- (Postgres lo trata como un intento de renombrar la columna que quedó en esa
+-- posición) — solo agregar columnas nuevas al final.
 create or replace view public.profiles_publicos as
   select
     id, tipo, nombre, categoria, tarifa, tarifa_urgente, experiencia, zona,
-    servicios, verificado, antecedentes_verificado, estado, disponibilidad,
-    disponible_ahora, foto_url, galeria_fotos, lat, lng, radio_cobertura_km,
-    created_at
+    servicios, verificado, estado, disponibilidad, disponible_ahora, foto_url,
+    galeria_fotos, lat, lng, radio_cobertura_km, created_at,
+    antecedentes_verificado
   from public.profiles;
 
 grant select on public.profiles_publicos to anon, authenticated;
