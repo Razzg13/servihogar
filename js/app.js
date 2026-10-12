@@ -710,8 +710,8 @@ async function renderHome(){
   const catsBox = document.getElementById('home-cats');
   if(catsBox){
     const iconMas = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`;
-    catsBox.innerHTML = CATS.map(c=>
-      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${esc(c.n)}')"><span class="ic-wrap">${iconSVG(c.n)}</span><span>${esc(c.n)}</span></button>`
+    catsBox.innerHTML = CATS.map((c,i)=>
+      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${esc(c.n)}')"><span class="svc-n mono">${String(i+1).padStart(2,'0')}</span><span class="ic-wrap">${iconSVG(c.n)}</span><span>${esc(c.n)}</span></button>`
     ).join('') + `<button class="svc-card" onclick="nav('buscar')"><span class="ic-wrap">${iconMas}</span><span>Más</span></button>`;
   }
 
@@ -778,7 +778,7 @@ function buscarDesdeHomeEnVivo(){
 function proCardHTML(w){
   const rating = avg(w.resenas);
   const n = (w.resenas || []).length;
-  return `<div class="pro-card">
+  return `<div class="pro-card ticket">
     <div class="pro-top">
       <div class="pro-photo">${avatarHTML(w.nombre, w.foto_url)}</div>
       <div class="pro-body">
@@ -786,12 +786,15 @@ function proCardHTML(w){
         <div class="pro-cat">${esc(w.categoria || '')}</div>
         <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
         <div class="pro-loc">${ICONO_UBICACION}${esc(w.zona || 'Ibagué')}</div>
-        <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
       </div>
     </div>
-    <div class="pro-actions">
-      <button class="btn btn-outline" onclick="verPerfil('${w.id}')">Ver perfil</button>
-      <button class="btn btn-primary" onclick="irAAgendar('${w.id}')">Agendar</button>
+    <div class="perf"></div>
+    <div class="pro-stub">
+      <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
+      <div class="pro-actions">
+        <button class="btn btn-outline" onclick="verPerfil('${w.id}')">Ver perfil</button>
+        <button class="btn btn-primary" onclick="irAAgendar('${w.id}')">Agendar</button>
+      </div>
     </div>
   </div>`;
 }
@@ -809,7 +812,7 @@ function workerCardHTML(w, opts={}){
     w.disponible_ahora ? `<span class="rating-pill disp-ahora">${ICONO_DISPONIBLE}Disponible ahora</span>` : '',
     distancia!==null ? `<span class="rating-pill dist">${ICONO_UBICACION}${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</span>` : '',
   ].filter(Boolean).join('');
-  return `<div class="pro-card pro-card--list" role="button" tabindex="0" aria-label="Ver perfil de ${esc(w.nombre)}" onclick="verPerfil('${w.id}')">
+  return `<div class="pro-card pro-card--list ticket" role="button" tabindex="0" aria-label="Ver perfil de ${esc(w.nombre)}" onclick="verPerfil('${w.id}')">
     <div class="pro-top">
       <div class="pro-photo">
         ${avatarHTML(w.nombre, w.foto_url)}
@@ -820,12 +823,15 @@ function workerCardHTML(w, opts={}){
         <div class="pro-cat">${esc(w.categoria || '')}${w.zona?` · ${esc(w.zona)}`:''}</div>
         <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
         ${(insignias || pills) ? `<div class="pro-pills">${insignias}${pills}</div>` : ''}
-        <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
       </div>
     </div>
-    <div class="pro-actions">
-      <button class="btn btn-outline" onclick="event.stopPropagation(); verPerfil('${w.id}')">Ver perfil</button>
-      <button class="btn btn-primary" onclick="event.stopPropagation(); irAAgendar('${w.id}')">Agendar</button>
+    <div class="perf"></div>
+    <div class="pro-stub">
+      <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
+      <div class="pro-actions">
+        <button class="btn btn-outline" onclick="event.stopPropagation(); verPerfil('${w.id}')">Ver perfil</button>
+        <button class="btn btn-primary" onclick="event.stopPropagation(); irAAgendar('${w.id}')">Agendar</button>
+      </div>
     </div>
     ${compararCheckbox}
   </div>`;
