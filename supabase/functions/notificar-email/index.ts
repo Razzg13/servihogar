@@ -22,6 +22,13 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// notificacion.texto puede incluir texto libre escrito por otro usuario (ej. el
+// motivo de cancelación, o el nombre de alguien al registrarse) — sin escapar,
+// eso se inyectaría tal cual en el HTML del correo del destinatario.
+function escHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -54,7 +61,7 @@ Deno.serve(async (req) => {
         from: REMITENTE,
         to: perfil.correo,
         subject: 'Tienes una nueva notificación en Hogandia',
-        html: `<p>Hola ${perfil.nombre?.split(' ')[0] ?? ''},</p><p>${notificacion.texto}</p>`,
+        html: `<p>Hola ${escHtml(perfil.nombre?.split(' ')[0] ?? '')},</p><p>${escHtml(notificacion.texto)}</p>`,
       }),
     });
 
