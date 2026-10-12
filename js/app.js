@@ -116,12 +116,13 @@ async function activarNotificacionesPush(){
         });
       }
       const json = sub.toJSON();
-      await sb.from('push_subscriptions').upsert({
+      const { error } = await sb.from('push_subscriptions').upsert({
         user_id: u.id,
         endpoint: json.endpoint,
         p256dh: json.keys.p256dh,
         auth: json.keys.auth,
       }, { onConflict: 'endpoint' });
+      if(error){ mostrarToast('No se pudo activar notificaciones push.', 'err'); return; }
       mostrarToast('Notificaciones push activadas.', 'ok');
       if(btn) btn.remove();
     }catch(e){
