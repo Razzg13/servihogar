@@ -2584,14 +2584,14 @@ async function abrirComprobante(citaId){
   const [w, cliente] = await Promise.all([obtenerPerfil(c.trabajadorId), obtenerPerfil(c.clienteId)]);
   win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Comprobante Hogandia</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
   <style>
     body{font-family:'IBM Plex Mono',monospace; padding:28px; color:#14201B;}
-    h1{font-family:'Space Grotesk',sans-serif; font-size:18px; color:#1C2B39; margin-bottom:4px;}
+    h1{font-family:'IBM Plex Serif',serif; font-size:18px; color:#1C2B39; margin-bottom:4px;}
     .sub{color:#5B6A66; font-size:11px; letter-spacing:0.04em; margin-bottom:20px;}
     .row{display:flex; justify-content:space-between; border-bottom:1px dashed #E4DFD5; padding:10px 0; font-size:12.5px;}
     .row span{color:#5B6A66; text-transform:uppercase; letter-spacing:0.05em; font-size:10.5px;}
-    .row b{font-family:'Space Grotesk',sans-serif; color:#1C2B39; font-weight:700;}
+    .row b{font-family:'IBM Plex Serif',serif; color:#1C2B39; font-weight:700;}
     .stamp{margin-top:20px; padding:10px; background:#EAF3EC; color:#3F7D58; text-align:center; border-radius:8px; font-weight:600; font-size:11.5px;}
   </style></head><body>
   <h1>Hogandia — Orden de servicio</h1>

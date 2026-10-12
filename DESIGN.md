@@ -15,7 +15,7 @@ colors:
   line: "#E4DFD5"
 typography:
   display:
-    fontFamily: "Space Grotesk, sans-serif"
+    fontFamily: "IBM Plex Serif, serif"
     fontWeight: 700
     letterSpacing: "-0.01em"
   body:
@@ -74,14 +74,14 @@ components:
 
 **Creative North Star: "El Recibo de Confianza"**
 
-Hogandia se siente como un comprobante formal, no como una app de redes sociales. Su patrón más distintivo y más repetido —desde el perfil de un trabajador hasta el panel de estadísticas del admin o del propio trabajador— es la "ficha de datos": una etiqueta en mayúsculas IBM Plex Mono, un valor grande en Space Grotesk, y a veces una nota pequeña debajo. Calificación, trabajos hechos, zona, tarifa, total cobrado, citas completadas: todo lo que el usuario necesita poder *confiar* se presenta así, como líneas de un recibo verificable, no como una tarjeta decorativa.
+Hogandia se siente como un comprobante formal, no como una app de redes sociales. Su patrón más distintivo y más repetido —desde el perfil de un trabajador hasta el panel de estadísticas del admin o del propio trabajador— es la "ficha de datos": una etiqueta en mayúsculas IBM Plex Mono, un valor grande en IBM Plex Serif, y a veces una nota pequeña debajo. Calificación, trabajos hechos, zona, tarifa, total cobrado, citas completadas: todo lo que el usuario necesita poder *confiar* se presenta así, como líneas de un recibo verificable, no como una tarjeta decorativa.
 
 Sobre esa base funcional se apoya una paleta cálida de "papel" (fondo crema `--paper`) y navy profesional (`--navy`) con un único acento naranja-terracota (`--orange`) que actúa casi exclusivamente como llamado a la acción. El sistema es local y de oficio —Ibagué, plomeros, electricistas— no una fintech genérica: cálido, con textura de papel, pero serio en sus datos.
 
 El modo oscuro no es un tema distinto: invierte navy↔claro para fondo y texto, pero el naranja se mantiene idéntico en ambos modos, como constante de marca.
 
 **Key Characteristics:**
-- Fichas de datos tipo "recibo": label mono mayúscula + valor grande Space Grotesk, repetidas en perfil, panel admin y panel del trabajador.
+- Fichas de datos tipo "recibo": label mono mayúscula + valor grande IBM Plex Serif, repetidas en perfil, panel admin y panel del trabajador.
 - Un solo acento de color (naranja) usado con moderación, casi siempre en botones primarios y estados activos.
 - Sombra única, suave y difusa en todas las superficies elevadas — nunca dura ni con grados de elevación distintos.
 - Esquinas generosas (12–16px en tarjetas, 20px en formularios) pero controles compactos (9–10px en botones/inputs).
@@ -115,11 +115,11 @@ Paleta cálida y de bajo contraste cromático: un solo acento saturado (naranja)
 
 ## Typography
 
-**Display Font:** Space Grotesk (con fallback sans-serif)
+**Display Font:** IBM Plex Serif (con fallback serif)
 **Body Font:** IBM Plex Sans (con fallback sans-serif)
 **Label/Mono Font:** IBM Plex Mono (con fallback monospace)
 
-**Character:** Space Grotesk aporta el carácter de marca —geométrica, firme, ligeramente técnica— en títulos y cifras grandes; IBM Plex Sans es neutro y muy legible para párrafos; IBM Plex Mono funcional-administrativo para todo lo que deba leerse como un dato verificado.
+**Character:** las tres son de la misma familia tipográfica (IBM Plex) — nadie más combina Serif + Sans + Mono de Plex así, lo que le da especificidad al sistema sin sumar una fuente nueva. IBM Plex Serif aporta carácter editorial y de documento formal en títulos y cifras grandes (encaja con el "Recibo de Confianza" mejor que una sans geométrica genérica); IBM Plex Sans es neutro y muy legible para párrafos; IBM Plex Mono funcional-administrativo para todo lo que deba leerse como un dato verificado.
 
 ### Hierarchy
 - **Display** (700, `clamp(31px,4vw,45px)`, 1.1): titular del hero de home únicamente.
@@ -174,7 +174,7 @@ El CSS incluye además una clase `.ticket` (muescas circulares + línea de perfo
 - **Internal Padding:** 16–24px.
 
 ### Ficha de Datos ("Recibo")
-Componente de firma del sistema: grilla de 2 a 4 columnas, cada celda con label mono mayúscula pequeño arriba y valor grande Space Grotesk abajo (opcionalmente una nota mono pequeña debajo del valor). Aparece como `.spec-sheet` en el perfil del trabajador (calificación, trabajos hechos, zona, tarifa) y como `.admin-stat` en los paneles de estadísticas (admin y trabajador). Fondo ligeramente distinto al resto de la tarjeta (`--steps-bg` en el perfil) para que se lea como una sección aparte, tipo recibo insertado.
+Componente de firma del sistema: grilla de 2 a 4 columnas, cada celda con label mono mayúscula pequeño arriba y valor grande IBM Plex Serif abajo (opcionalmente una nota mono pequeña debajo del valor). Aparece como `.spec-sheet` en el perfil del trabajador (calificación, trabajos hechos, zona, tarifa) y como `.admin-stat` en los paneles de estadísticas (admin y trabajador). Fondo ligeramente distinto al resto de la tarjeta (`--steps-bg` en el perfil) para que se lea como una sección aparte, tipo recibo insertado.
 
 ### Inputs / Fields
 - **Style:** fondo tarjeta, borde 1.5px `--line`, radio 11px.
@@ -194,6 +194,6 @@ Componente de firma del sistema: grilla de 2 a 4 columnas, cada celda con label 
 
 ### Don't:
 - **Don't** introducir un segundo color de acento saturado compitiendo con el naranja.
-- **Don't** usar Arial, system-ui o una fuente sans genérica donde el sistema ya define Space Grotesk / IBM Plex Sans.
+- **Don't** usar Arial, system-ui o una fuente sans genérica donde el sistema ya define IBM Plex Serif / IBM Plex Sans.
 - **Don't** apilar tarjetas dentro de tarjetas; el sistema usa una sola capa de elevación por superficie.
 - **Don't** asumir que `.ticket` (muescas + perforación) ya está en uso solo porque existe en el CSS — hoy es una clase sin aplicar.
