@@ -58,7 +58,11 @@ function disponibilidadPorDefecto(){
 
 const THEME_KEY = 'servihogar_theme';
 function loadTheme(){ return localStorage.getItem(THEME_KEY) || 'light'; }
-function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); }
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content', t==='dark' ? '#182530' : '#FFFFFF');
+}
 function toggleTheme(){
   const next = document.documentElement.getAttribute('data-theme')==='dark' ? 'light' : 'dark';
   applyTheme(next); localStorage.setItem(THEME_KEY, next);
@@ -591,6 +595,15 @@ document.addEventListener('click', e=>{
   }
 });
 
+// Activa con Enter/Espacio cualquier tarjeta clicable marcada role="button" (pro-card--list, estrellas de calificación)
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Enter' && e.key !== ' ') return;
+  const target = e.target.closest('[role="button"]');
+  if(!target) return;
+  e.preventDefault();
+  target.click();
+});
+
 function renderNav(active){
   const u = currentUser();
   document.body.dataset.view = active;
@@ -796,7 +809,7 @@ function workerCardHTML(w, opts={}){
     w.disponible_ahora ? `<span class="rating-pill disp-ahora">${ICONO_DISPONIBLE}Disponible ahora</span>` : '',
     distancia!==null ? `<span class="rating-pill dist">${ICONO_UBICACION}${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</span>` : '',
   ].filter(Boolean).join('');
-  return `<div class="pro-card pro-card--list" onclick="verPerfil('${w.id}')">
+  return `<div class="pro-card pro-card--list" role="button" tabindex="0" aria-label="Ver perfil de ${esc(w.nombre)}" onclick="verPerfil('${w.id}')">
     <div class="pro-top">
       <div class="pro-photo">
         ${avatarHTML(w.nombre, w.foto_url)}
@@ -1865,7 +1878,7 @@ function abrirCalificar(id){
   const panel = document.getElementById('calificar-panel');
   panel.innerHTML = `<div class="card">
     <h3 style="font-size:14px;margin-bottom:10px;">Califica el servicio</h3>
-    <div class="stars-input" id="stars-input">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="setStars(${n})">★</span>`).join('')}</div>
+    <div class="stars-input" id="stars-input">${[1,2,3,4,5].map(n=>`<span data-n="${n}" role="button" tabindex="0" aria-label="${n} estrella${n>1?'s':''}" onclick="setStars(${n})">★</span>`).join('')}</div>
     <textarea id="calif-comentario" placeholder="Cuéntanos cómo te fue..." rows="3" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;margin-bottom:12px;"></textarea>
     <label style="font-size:12px;color:var(--ink-soft);display:block;margin-bottom:8px;">Agregar fotos del trabajo (opcional, hasta 4)</label>
     <input type="file" id="calif-fotos" accept="image/*" multiple style="margin-bottom:12px;">
@@ -1912,7 +1925,7 @@ function abrirCalificarCliente(citaId){
   const panel = document.getElementById('calificar-cliente-panel');
   panel.innerHTML = `<div class="card">
     <h3 style="font-size:14px;margin-bottom:10px;">Califica a este cliente</h3>
-    <div class="stars-input" id="stars-input-cliente">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="setStarsCliente(${n})">★</span>`).join('')}</div>
+    <div class="stars-input" id="stars-input-cliente">${[1,2,3,4,5].map(n=>`<span data-n="${n}" role="button" tabindex="0" aria-label="${n} estrella${n>1?'s':''}" onclick="setStarsCliente(${n})">★</span>`).join('')}</div>
     <textarea id="calif-cliente-comentario" placeholder="Notas sobre este cliente (opcional)..." rows="3" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;margin-bottom:12px;"></textarea>
     <button class="btn btn-primary" onclick="enviarCalificacionCliente('${citaId}', this)">Enviar calificación</button>
   </div>`;
