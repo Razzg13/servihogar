@@ -3,3 +3,11 @@ Thumbs.db
 *.log
 node_modules/
 supabase/.temp/
+
+# Herramientas/skills de IA instaladas localmente (no son código del proyecto)
+.claude/
+.agents/
+.codex/
+.impeccable/
+graphify-out/
+skills-lock.json
