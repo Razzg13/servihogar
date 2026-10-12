@@ -545,7 +545,7 @@ function avatarHTML(nombre, fotoUrl){
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
-const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','trabajo','admin','resetpass','privacidad','terminos','accesibilidad','pqr'];
+const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','cuenta','trabajo','admin','resetpass','privacidad','terminos','accesibilidad','pqr'];
 // Título del documento por vista: la app es de una sola página, así que sin esto
 // todas las pantallas comparten el mismo <title> (malo para el historial del
 // navegador, para compartir un link y para lectores de pantalla, que anuncian
@@ -558,6 +558,7 @@ const TITULOS_VISTA = {
   agendar: 'Agendar una cita — Hogandia',
   miscitas: 'Mis citas — Hogandia',
   favoritos: 'Mis favoritos — Hogandia',
+  cuenta: 'Mi cuenta — Hogandia',
   trabajo: 'Panel del trabajador — Hogandia',
   admin: 'Panel de administración — Hogandia',
   resetpass: 'Nueva contraseña — Hogandia',
@@ -607,6 +608,7 @@ function nav(view){
   if(view==='buscar') renderBuscar();
   if(view==='miscitas') renderMisCitas();
   if(view==='favoritos') renderFavoritos();
+  if(view==='cuenta') renderCuenta();
   if(view==='trabajo') renderTrabajo();
   if(view==='admin') renderAdmin();
   if(view==='pqr') renderPQR();
@@ -651,6 +653,7 @@ function renderNav(active){
                   <button class="${active==='favoritos'?'on':''}" onclick="nav('favoritos')">Favoritos</button>`;
   if(u && u.tipo==='trabajador') linkHtml += `<button class="${active==='trabajo'?'on':''}" onclick="nav('trabajo')">Panel trabajador</button>`;
   if(u && u.tipo==='admin') linkHtml += `<button class="${active==='admin'?'on':''}" onclick="nav('admin')">Panel admin</button>`;
+  if(u) linkHtml += `<button class="${active==='cuenta'?'on':''}" onclick="nav('cuenta')">Mi cuenta</button>`;
   links.innerHTML = linkHtml;
   links.classList.toggle('open', state.mobileNavOpen);
 
@@ -908,6 +911,116 @@ async function renderFavoritos(){
   const favs = await obtenerPerfiles(u.favoritos||[]);
   box.innerHTML = favs.length ? `<div class="worker-grid">${favs.map(workerCardHTML).join('')}</div>`
     : `<div class="empty-note">Todavía no has guardado trabajadores. Toca el corazón ♡ en cualquier tarjeta para guardarlo aquí.</div>`;
+}
+
+/* ---------------- MI CUENTA ---------------- */
+// Antes de esto, un cliente logueado no tenía ninguna pantalla para ver o
+// editar su propio nombre, celular o foto, ni para cambiar su contraseña
+// estando logueado (solo existía el flujo de "olvidé mi contraseña" por
+// correo). Esta vista es la misma para cualquier tipo de usuario — los datos
+// profesionales del trabajador (categoría, tarifa, zona, etc.) se siguen
+// editando en "Panel trabajador › Mi perfil profesional".
+async function renderCuenta(){
+  const u = currentUser();
+  const box = document.getElementById('cuenta-content');
+  if(!u){ box.innerHTML = `<div class="empty-note">Inicia sesión para ver tu cuenta.</div>`; return; }
+  box.innerHTML = `
+    <div class="profile-grid">
+      <div class="card">
+        <h3 style="font-size:15px; margin-bottom:14px;">Datos de la cuenta</h3>
+        <div id="cuenta-msg" role="status" aria-live="polite"></div>
+        <div class="field"><label for="cuenta-nombre">Nombre completo</label><input id="cuenta-nombre" value="${esc(u.nombre)}"></div>
+        <div class="field"><label for="cuenta-correo">Correo electrónico</label><input id="cuenta-correo" value="${esc(u.correo||'')}" disabled></div>
+        <p style="font-size:11.5px; color:var(--ink-soft); margin:-10px 0 14px;">Para cambiar el correo con el que iniciás sesión, escribinos desde <a href="#/pqr">PQR</a>.</p>
+        <div class="field"><label for="cuenta-celular">Celular (para avisos por WhatsApp)</label><input type="tel" id="cuenta-celular" value="${esc(u.celular||'')}" placeholder="Ej. 3001234567"></div>
+        <button class="btn btn-primary" onclick="guardarCuenta(this)">Guardar cambios</button>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:18px; text-align:center;">
+          <h3 style="font-size:15px; margin-bottom:14px;">Foto de perfil</h3>
+          <div style="width:88px; height:88px; border-radius:16px; overflow:hidden; margin:0 auto 12px;">${avatarHTML(u.nombre, u.foto_url)}</div>
+          <input type="file" id="cuenta-foto-input" accept="image/*" class="hidden" onchange="subirFotoCuenta()">
+          <button type="button" class="btn btn-outline" style="width:100%;" onclick="document.getElementById('cuenta-foto-input').click()">Cambiar foto</button>
+          <div id="cuenta-foto-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
+        </div>
+        <div class="card">
+          <h3 style="font-size:15px; margin-bottom:14px;">Cambiar contraseña</h3>
+          <div id="cuenta-pass-msg" role="status" aria-live="polite"></div>
+          <div class="field"><label for="cuenta-pass">Nueva contraseña</label>
+            <div class="password-field"><input type="password" id="cuenta-pass" minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('cuenta-pass', this)">👁</button></div>
+          </div>
+          <div class="field"><label for="cuenta-pass2">Confirmar nueva contraseña</label>
+            <div class="password-field"><input type="password" id="cuenta-pass2" minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('cuenta-pass2', this)">👁</button></div>
+          </div>
+          <button class="btn btn-outline" style="width:100%;" onclick="cambiarContrasenaCuenta(this)">Actualizar contraseña</button>
+        </div>
+      </div>
+    </div>`;
+}
+async function guardarCuenta(btn){
+  const u = currentUser();
+  const nombre = document.getElementById('cuenta-nombre').value.trim();
+  const celular = document.getElementById('cuenta-celular').value.trim();
+  const msgEl = document.getElementById('cuenta-msg');
+  if(!nombre){ msgEl.innerHTML = `<div class="msg err">El nombre no puede quedar vacío.</div>`; return; }
+  if(!celularValido(celular)){
+    msgEl.innerHTML = `<div class="msg err">Ese celular no parece válido. Usa un número colombiano de 10 dígitos (ej. 3001234567).</div>`;
+    return;
+  }
+  await conCargando(btn, 'Guardando...', async () => {
+    const { error } = await sb.from('profiles').update({ nombre, celular: celular || null }).eq('id', u.id);
+    if(error){ msgEl.innerHTML = `<div class="msg err">No se pudo guardar: ${esc(error.message)}</div>`; return; }
+    invalidarPerfil(u.id);
+    await cargarPerfilActual();
+    msgEl.innerHTML = `<div class="msg ok">✓ Cambios guardados.</div>`;
+    renderNav(document.querySelector('.view.active').id.replace('v-',''));
+  });
+}
+async function subirFotoCuenta(){
+  const u = currentUser();
+  const input = document.getElementById('cuenta-foto-input');
+  const file = input && input.files[0];
+  const msgEl = document.getElementById('cuenta-foto-msg');
+  if(!file) return;
+  if(!file.type.startsWith('image/')){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">Elegí un archivo de imagen.</div>`;
+    return;
+  }
+  if(archivoDemasiadoGrande(file)){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">${MSG_ARCHIVO_GRANDE}</div>`;
+    return;
+  }
+  const ext = file.name.split('.').pop();
+  const path = `${u.id}/avatar.${ext}`;
+  const { error: upErr } = await sb.storage.from('avatares').upload(path, file, { upsert: true });
+  if(upErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">No se pudo subir la foto: ${esc(upErr.message)}</div>`;
+    return;
+  }
+  const { data: pub } = sb.storage.from('avatares').getPublicUrl(path);
+  const { error: updErr } = await sb.from('profiles').update({ foto_url: pub.publicUrl }).eq('id', u.id);
+  if(updErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">La foto se subió, pero no se pudo guardar en tu perfil: ${esc(updErr.message)}</div>`;
+    return;
+  }
+  invalidarPerfil(u.id);
+  await cargarPerfilActual();
+  renderCuenta();
+}
+async function cambiarContrasenaCuenta(btn){
+  const p1 = document.getElementById('cuenta-pass').value;
+  const p2 = document.getElementById('cuenta-pass2').value;
+  const msgEl = document.getElementById('cuenta-pass-msg');
+  if(!p1 || p1.length<4){ msgEl.innerHTML = `<div class="msg err">La contraseña debe tener al menos 4 caracteres.</div>`; return; }
+  if(p1 !== p2){ msgEl.innerHTML = `<div class="msg err">Las contraseñas no coinciden.</div>`; return; }
+  await conCargando(btn, 'Guardando...', async () => {
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    if(error){ msgEl.innerHTML = `<div class="msg err">No se pudo actualizar la contraseña: ${esc(error.message)}</div>`; return; }
+    document.getElementById('cuenta-pass').value = '';
+    document.getElementById('cuenta-pass2').value = '';
+    msgEl.innerHTML = `<div class="msg ok">✓ Contraseña actualizada.</div>`;
+    mostrarToast('Contraseña actualizada.', 'ok');
+  });
 }
 
 /* ---------------- ACCESIBILIDAD ---------------- */
