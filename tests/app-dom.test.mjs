@@ -299,7 +299,7 @@ evalCtx(`verPerfil('w-jardin')`);
 await esperar(250);
 const perfilNombre = q(`document.querySelector('#perfil-content .profile-header h2').textContent.trim()`);
 comprobar('El perfil del trabajador carga sus datos', /Carlos/.test(perfilNombre), perfilNombre);
-comprobar('El perfil muestra la insignia de verificado', /Verificado/.test(q(`document.querySelector('#perfil-content').innerHTML`)));
+comprobar('El perfil muestra la insignia de identidad verificada', /Identidad/.test(q(`document.querySelector('#perfil-content').innerHTML`)));
 comprobar('El perfil muestra la galería de trabajos', q(`document.querySelectorAll('#perfil-content .galeria-item').length`) >= 1);
 comprobar('El perfil lista las reseñas con su respuesta', q(`document.querySelectorAll('#perfil-content .review').length`) === 2);
 comprobar('El perfil tiene mapa e indicador de zona', /Ambalá/.test(q(`document.querySelector('#perfil-content .map-caption').textContent`)));

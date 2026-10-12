@@ -545,7 +545,7 @@ function avatarHTML(nombre, fotoUrl){
 }
 
 /* ---------------- NAV / ROUTING ---------------- */
-const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','cuenta','trabajo','admin','resetpass','privacidad','terminos','accesibilidad','pqr'];
+const VISTAS_VALIDAS = ['home','auth','buscar','perfil','agendar','miscitas','favoritos','cuenta','cotizaciones','trabajo','admin','resetpass','privacidad','terminos','accesibilidad','pqr'];
 // Título del documento por vista: la app es de una sola página, así que sin esto
 // todas las pantallas comparten el mismo <title> (malo para el historial del
 // navegador, para compartir un link y para lectores de pantalla, que anuncian
@@ -559,6 +559,7 @@ const TITULOS_VISTA = {
   miscitas: 'Mis citas — Hogandia',
   favoritos: 'Mis favoritos — Hogandia',
   cuenta: 'Mi cuenta — Hogandia',
+  cotizaciones: 'Pedir cotización — Hogandia',
   trabajo: 'Panel del trabajador — Hogandia',
   admin: 'Panel de administración — Hogandia',
   resetpass: 'Nueva contraseña — Hogandia',
@@ -609,6 +610,7 @@ function nav(view){
   if(view==='miscitas') renderMisCitas();
   if(view==='favoritos') renderFavoritos();
   if(view==='cuenta') renderCuenta();
+  if(view==='cotizaciones') renderCotizaciones();
   if(view==='trabajo') renderTrabajo();
   if(view==='admin') renderAdmin();
   if(view==='pqr') renderPQR();
@@ -650,6 +652,7 @@ function renderNav(active){
   let linkHtml = `<button class="${active==='home'?'on':''}" onclick="nav('home')">Inicio</button>
                   <button class="${active==='buscar'?'on':''}" onclick="nav('buscar')">Buscar trabajadores</button>`;
   if(u && u.tipo==='cliente') linkHtml += `<button class="${active==='miscitas'?'on':''}" onclick="nav('miscitas')">Mis citas</button>
+                  <button class="${active==='cotizaciones'?'on':''}" onclick="nav('cotizaciones')">Pedir cotización</button>
                   <button class="${active==='favoritos'?'on':''}" onclick="nav('favoritos')">Favoritos</button>`;
   if(u && u.tipo==='trabajador') linkHtml += `<button class="${active==='trabajo'?'on':''}" onclick="nav('trabajo')">Panel trabajador</button>`;
   if(u && u.tipo==='admin') linkHtml += `<button class="${active==='admin'?'on':''}" onclick="nav('admin')">Panel admin</button>`;
@@ -1020,6 +1023,163 @@ async function cambiarContrasenaCuenta(btn){
     document.getElementById('cuenta-pass2').value = '';
     msgEl.innerHTML = `<div class="msg ok">✓ Contraseña actualizada.</div>`;
     mostrarToast('Contraseña actualizada.', 'ok');
+  });
+}
+
+/* ---------------- PEDIR COTIZACIÓN ---------------- */
+// Flujo tipo Thumbtack: el cliente describe el trabajo UNA vez (categoría,
+// descripción, zona, urgencia) y los trabajadores de esa categoría pueden
+// responder con su precio, en vez de que el cliente tenga que entrar perfil
+// por perfil a escribirle a cada uno. Las cotizaciones de cada trabajador
+// son privadas entre ese trabajador y el cliente (RLS en la migración 027).
+async function renderCotizaciones(){
+  const u = currentUser();
+  const box = document.getElementById('cotizaciones-content');
+  if(!u || u.tipo!=='cliente'){ box.innerHTML = `<div class="empty-note">Inicia sesión como cliente para pedir una cotización.</div>`; return; }
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
+  const { data, error } = await sb.from('solicitudes_cotizacion').select('*').eq('cliente_id', u.id).order('created_at', {ascending:false});
+  const solicitudes = error ? [] : data;
+  const conteos = await Promise.all(solicitudes.map(async s=>{
+    const { count } = await sb.from('cotizaciones').select('id', {count:'exact', head:true}).eq('solicitud_id', s.id);
+    return count || 0;
+  }));
+
+  box.innerHTML = `
+    <div class="card" style="max-width:560px; margin-bottom:20px;">
+      <h3 style="font-size:15px; margin-bottom:14px;">Nueva solicitud</h3>
+      <div id="cotizacion-msg" role="status" aria-live="polite"></div>
+      <div class="field"><label for="cotiz-cat">Categoría</label>
+        <select id="cotiz-cat">${CATS.map(c=>`<option>${esc(c.n)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label for="cotiz-desc">¿Qué necesitás?</label>
+        <textarea id="cotiz-desc" rows="3" placeholder="Ej: se dañó la llave del baño y gotea sin parar..." style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;"></textarea>
+      </div>
+      <div class="field"><label for="cotiz-zona">Zona</label><select id="cotiz-zona">${zonaOptionsHTML('')}</select></div>
+      <div class="field"><label for="cotiz-urgencia">¿Para cuándo?</label>
+        <select id="cotiz-urgencia">
+          <option value="hoy">Hoy / urgente</option>
+          <option value="esta_semana">Esta semana</option>
+          <option value="flexible" selected>Soy flexible</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="publicarSolicitudCotizacion(this)">Publicar solicitud</button>
+    </div>
+    <h3 style="font-size:15px; margin-bottom:12px;">Tus solicitudes</h3>
+    ${solicitudes.length ? solicitudes.map((s,i)=>`
+      <div class="card" style="max-width:560px; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <b style="font-size:13px;">${esc(s.categoria)}</b>
+          <span class="status-pill status-${s.estado==='abierta'?'pendiente':'bloqueado'}">${s.estado==='abierta'?'Abierta':'Cerrada'}</span>
+        </div>
+        <p style="font-size:13px; color:var(--ink-soft); margin-bottom:8px;">${esc(s.descripcion)}</p>
+        <p style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;">${esc(s.zona||'Cualquier zona')} · ${s.urgencia==='hoy'?'Urgente':s.urgencia==='esta_semana'?'Esta semana':'Flexible'}</p>
+        <button type="button" class="btn btn-outline" onclick="verCotizacionesRecibidas('${s.id}')">Ver cotizaciones (${conteos[i]})</button>
+        ${s.estado==='abierta' ? `<button type="button" class="btn btn-outline" style="margin-left:8px;" onclick="cerrarSolicitudCotizacion('${s.id}', this)">Cerrar</button>` : ''}
+        <div id="cotiz-respuestas-${s.id}" style="margin-top:12px;"></div>
+      </div>`).join('') : `<div class="empty-note">Todavía no publicaste ninguna solicitud.</div>`}
+  `;
+}
+async function publicarSolicitudCotizacion(btn){
+  const u = currentUser();
+  const categoria = document.getElementById('cotiz-cat').value;
+  const descripcion = document.getElementById('cotiz-desc').value.trim();
+  const zona = document.getElementById('cotiz-zona').value;
+  const urgencia = document.getElementById('cotiz-urgencia').value;
+  const msgEl = document.getElementById('cotizacion-msg');
+  if(!descripcion){ msgEl.innerHTML = `<div class="msg err">Contanos qué necesitás.</div>`; return; }
+  await conCargando(btn, 'Publicando...', async () => {
+    const { error } = await sb.from('solicitudes_cotizacion').insert({
+      cliente_id: u.id, categoria, descripcion, zona: zona || null, urgencia
+    });
+    if(error){ msgEl.innerHTML = `<div class="msg err">No se pudo publicar: ${esc(error.message)}</div>`; return; }
+    // Avisa a los trabajadores activos de esa categoría (profiles_publicos: sin
+    // datos sensibles, pero el id alcanza para mandarles la notificación).
+    const { data: trabajadoresCat } = await sb.from('profiles_publicos').select('id').eq('categoria', categoria).eq('estado','activo');
+    const resumen = descripcion.length>60 ? descripcion.slice(0,60)+'...' : descripcion;
+    (trabajadoresCat||[]).forEach(w => addNotificacion(w.id, `Nueva solicitud de cotización en ${categoria}: "${resumen}"`));
+    mostrarToast('Solicitud publicada. Te avisamos cuando alguien te escriba.', 'ok');
+    renderCotizaciones();
+  });
+}
+async function cerrarSolicitudCotizacion(id, btn){
+  await conCargando(btn, 'Cerrando...', async () => {
+    const { error } = await sb.from('solicitudes_cotizacion').update({ estado:'cerrada' }).eq('id', id);
+    if(error){ mostrarToast('No se pudo cerrar la solicitud.', 'err'); return; }
+    mostrarToast('Solicitud cerrada.', 'ok');
+    renderCotizaciones();
+  });
+}
+async function verCotizacionesRecibidas(solicitudId){
+  const box = document.getElementById(`cotiz-respuestas-${solicitudId}`);
+  if(!box) return;
+  if(box.innerHTML){ box.innerHTML=''; return; } // toggle: si ya estaba abierto, lo cierra
+  box.innerHTML = '<div class="empty-note">Cargando...</div>';
+  const { data, error } = await sb.from('cotizaciones').select('*').eq('solicitud_id', solicitudId).order('created_at');
+  const respuestas = error ? [] : data;
+  const trabajadores = await obtenerPerfiles(respuestas.map(r=>r.trabajador_id));
+  const porId = new Map(trabajadores.map(w=>[w && w.id, w]));
+  box.innerHTML = respuestas.length ? respuestas.map(r=>{
+    const w = porId.get(r.trabajador_id);
+    return `<div class="review" style="padding:10px 0;">
+      <div style="display:flex; justify-content:space-between; gap:10px;">
+        <b style="font-size:12.5px;">${w?esc(w.nombre):'Trabajador'}${w&&w.verificado?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}</b>
+        ${r.precio_estimado ? `<span class="mono" style="font-size:12.5px; flex-shrink:0;">${fmtCOP(r.precio_estimado)}</span>` : ''}
+      </div>
+      <p style="font-size:12.5px; color:var(--ink-soft); margin:4px 0;">${esc(r.mensaje||'')}</p>
+      ${w ? `<button type="button" class="btn btn-outline" style="font-size:11.5px;padding:5px 9px;" onclick="verPerfil('${w.id}')">Ver perfil</button>
+      <button type="button" class="btn btn-primary" style="font-size:11.5px;padding:5px 9px;" onclick="irAAgendar('${w.id}')">Agendar</button>` : ''}
+    </div>`;
+  }).join('') : `<div class="empty-note" style="padding:10px 0;">Todavía no recibiste cotizaciones.</div>`;
+}
+async function renderCotizarTrabajador(){
+  const u = currentUser();
+  const box = document.getElementById('work-cotizar');
+  if(!u || u.tipo!=='trabajador'){ box.innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver esto.</div>`; return; }
+  box.innerHTML = `<div class="empty-note">Cargando...</div>`;
+  const { data, error } = await sb.from('solicitudes_cotizacion').select('*').eq('estado','abierta').eq('categoria', u.categoria).order('created_at', {ascending:false});
+  const solicitudes = error ? [] : data;
+  const { data: propias } = await sb.from('cotizaciones').select('solicitud_id').eq('trabajador_id', u.id);
+  const yaCotizadas = new Set((propias||[]).map(c=>c.solicitud_id));
+  const clientes = await obtenerPerfiles(solicitudes.map(s=>s.cliente_id));
+  const clientePorId = new Map(clientes.map(c=>[c && c.id, c]));
+
+  box.innerHTML = solicitudes.length ? solicitudes.map(s=>{
+    const cli = clientePorId.get(s.cliente_id);
+    const yaRespondida = yaCotizadas.has(s.id);
+    return `<div class="card" style="max-width:560px; margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <b style="font-size:13px;">${cli ? esc(cli.nombre) : 'Cliente'}</b>
+        <span style="font-size:11.5px; color:var(--ink-soft);">${new Date(s.created_at).toLocaleDateString()}</span>
+      </div>
+      <p style="font-size:13px; margin-bottom:8px;">${esc(s.descripcion)}</p>
+      <p style="font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;">${esc(s.zona||'Cualquier zona')} · ${s.urgencia==='hoy'?'Urgente':s.urgencia==='esta_semana'?'Esta semana':'Flexible'}</p>
+      ${yaRespondida ? `<span class="status-pill status-activo">Ya enviaste tu cotización</span>` : `
+        <div class="field"><label for="cotiz-precio-${s.id}">Tu precio estimado (COP, opcional)</label><input type="number" id="cotiz-precio-${s.id}" min="0" placeholder="Ej. 50000"></div>
+        <div class="field"><label for="cotiz-msg-${s.id}">Mensaje</label><textarea id="cotiz-msg-${s.id}" rows="2" style="width:100%;padding:10px;border:1.5px solid var(--line);border-radius:9px;font-family:inherit;font-size:13px;" placeholder="Contale cómo podés ayudarlo..."></textarea></div>
+        <button type="button" class="btn btn-primary" onclick="enviarCotizacionTrabajador('${s.id}', this)">Enviar cotización</button>
+        <div id="cotiz-envio-msg-${s.id}" role="status" aria-live="polite" style="margin-top:8px;"></div>
+      `}
+    </div>`;
+  }).join('') : `<div class="empty-note">No hay solicitudes abiertas en tu categoría por ahora.</div>`;
+}
+async function enviarCotizacionTrabajador(solicitudId, btn){
+  const u = currentUser();
+  const precioInput = document.getElementById(`cotiz-precio-${solicitudId}`);
+  const mensajeInput = document.getElementById(`cotiz-msg-${solicitudId}`);
+  const msgEl = document.getElementById(`cotiz-envio-msg-${solicitudId}`);
+  const mensaje = mensajeInput ? mensajeInput.value.trim() : '';
+  if(!mensaje){ if(msgEl) msgEl.innerHTML = `<div class="msg err">Escribí un mensaje para el cliente.</div>`; return; }
+  const precio = precioInput && precioInput.value ? Math.max(0, Number(precioInput.value)) : null;
+  await conCargando(btn, 'Enviando...', async () => {
+    const { data: sol } = await sb.from('solicitudes_cotizacion').select('cliente_id').eq('id', solicitudId).single();
+    const { error } = await sb.from('cotizaciones').insert({ solicitud_id: solicitudId, trabajador_id: u.id, mensaje, precio_estimado: precio });
+    if(error){
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">${error.message.includes('duplicate') ? 'Ya enviaste una cotización para esta solicitud.' : 'No se pudo enviar: '+esc(error.message)}</div>`;
+      return;
+    }
+    if(sol) addNotificacion(sol.cliente_id, `${u.nombre} te envió una cotización para tu solicitud.`);
+    mostrarToast('Cotización enviada.', 'ok');
+    renderCotizarTrabajador();
   });
 }
 
@@ -2394,13 +2554,16 @@ async function abrirComprobante(citaId){
 /* ---------------- PANEL TRABAJADOR ---------------- */
 function switchWorkTab(tab){
   document.getElementById('wtab-solicitudes').classList.toggle('on', tab==='solicitudes');
+  document.getElementById('wtab-cotizar').classList.toggle('on', tab==='cotizar');
   document.getElementById('wtab-mensajes').classList.toggle('on', tab==='mensajes');
   document.getElementById('wtab-ingresos').classList.toggle('on', tab==='ingresos');
   document.getElementById('wtab-perfil').classList.toggle('on', tab==='perfil');
   document.getElementById('work-solicitudes').classList.toggle('hidden', tab!=='solicitudes');
+  document.getElementById('work-cotizar').classList.toggle('hidden', tab!=='cotizar');
   document.getElementById('work-mensajes').classList.toggle('hidden', tab!=='mensajes');
   document.getElementById('work-ingresos').classList.toggle('hidden', tab!=='ingresos');
   document.getElementById('work-perfil').classList.toggle('hidden', tab!=='perfil');
+  if(tab==='cotizar') renderCotizarTrabajador();
   if(tab==='ingresos') renderIngresos();
   if(tab==='mensajes') renderMensajesTrabajador();
 }

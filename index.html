@@ -511,15 +511,28 @@
     <div id="cuenta-content"></div>
   </section>
 
+  <!-- PEDIR COTIZACIÓN (cliente) -->
+  <section class="view" id="v-cotizaciones">
+    <div class="page-head">
+      <div>
+        <h2>Pedir cotización</h2>
+        <p>Contá qué necesitás una sola vez y que varios profesionales te escriban con su precio.</p>
+      </div>
+    </div>
+    <div id="cotizaciones-content"></div>
+  </section>
+
   <!-- PANEL TRABAJADOR -->
   <section class="view" id="v-trabajo">
     <div class="tabbar">
       <button id="wtab-solicitudes" class="on" onclick="switchWorkTab('solicitudes')">Solicitudes</button>
+      <button id="wtab-cotizar" onclick="switchWorkTab('cotizar')">Pedidos de cotización</button>
       <button id="wtab-mensajes" onclick="switchWorkTab('mensajes')">Mensajes</button>
       <button id="wtab-ingresos" onclick="switchWorkTab('ingresos')">Ingresos</button>
       <button id="wtab-perfil" onclick="switchWorkTab('perfil')">Mi perfil profesional</button>
     </div>
     <div id="work-solicitudes"></div>
+    <div id="work-cotizar" class="hidden"></div>
     <div id="work-mensajes" class="hidden"></div>
     <div id="work-ingresos" class="hidden"></div>
     <div id="work-perfil" class="hidden"></div>
