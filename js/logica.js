@@ -157,12 +157,25 @@ function calcularCompletitudPerfil(w){
   };
 }
 
+/* ---------------- VALIDACIONES ---------------- */
+
+// Celular colombiano: 10 dígitos empezando en 3, con o sin indicativo +57 y
+// con o sin espacios/guiones/paréntesis de formato. El campo es opcional en
+// los formularios, así que un valor vacío también se considera válido.
+function celularValido(valor){
+  if(!valor || !valor.trim()) return true;
+  const digitos = valor.replace(/\D/g, '');
+  const sinIndicativo = digitos.length === 12 && digitos.startsWith('57') ? digitos.slice(2) : digitos;
+  return /^3\d{9}$/.test(sinIndicativo);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     avg, insigniasTrabajador,
     diaSemanaDeFecha, horasDisponiblesDia, parseFechaHoraCita, formatearFechaCita,
     calendarioMes, primerDiaDisponible,
     calcularMonto, calcularCompletitudPerfil,
+    celularValido,
   };
 } else {
   window.avg = avg;
@@ -175,4 +188,5 @@ if (typeof module !== 'undefined' && module.exports) {
   window.primerDiaDisponible = primerDiaDisponible;
   window.calcularMonto = calcularMonto;
   window.calcularCompletitudPerfil = calcularCompletitudPerfil;
+  window.celularValido = celularValido;
 }

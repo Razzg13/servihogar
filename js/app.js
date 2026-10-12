@@ -247,6 +247,13 @@ async function conCargando(btn, textoCargando, accion){
   finally{ btn.disabled = false; btn.textContent = textoOriginal; }
 }
 
+// Límite de tamaño para lo que se sube a Storage (comprobantes, fotos,
+// documento de verificación). Una foto de celular sin comprimir puede pesar
+// 10-20MB y fallar con un error técnico de Supabase si no se avisa antes.
+const MAX_ARCHIVO_MB = 8;
+function archivoDemasiadoGrande(file){ return file.size > MAX_ARCHIVO_MB * 1024 * 1024; }
+const MSG_ARCHIVO_GRANDE = `El archivo pesa más de ${MAX_ARCHIVO_MB}MB. Elegí uno más liviano o tomá la foto con menos resolución.`;
+
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
 let state = { catFiltro:null, servicioFiltro:null, workerActual:null, workerPerfil:null, workerPerfilError:false, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[] };
@@ -850,7 +857,13 @@ async function toggleFavorito(workerId){
   if(!u.favoritos) u.favoritos = [];
   const i = u.favoritos.indexOf(workerId);
   if(i>-1) u.favoritos.splice(i,1); else u.favoritos.push(workerId);
-  await sb.from('profiles').update({ favoritos: u.favoritos }).eq('id', u.id);
+  const { error } = await sb.from('profiles').update({ favoritos: u.favoritos }).eq('id', u.id);
+  if(error){
+    // revertir el cambio local: no quedó guardado del lado del servidor
+    if(i>-1) u.favoritos.push(workerId); else u.favoritos.pop();
+    mostrarToast('No se pudo guardar el favorito. Intenta de nuevo.', 'err');
+    return;
+  }
   // refrescar la vista donde estemos parados
   const activa = document.querySelector('.view.active').id.replace('v-','');
   if(activa==='home') renderHome();
@@ -1055,6 +1068,9 @@ async function doRegister(e){
   const msg = document.getElementById('auth-msg');
   if(pass !== pass2){
     msg.innerHTML = `<div class="msg err">Las contraseñas no coinciden.</div>`; return false;
+  }
+  if(!celularValido(celular)){
+    msg.innerHTML = `<div class="msg err">Ese celular no parece válido. Usa un número colombiano de 10 dígitos (ej. 3001234567).</div>`; return false;
   }
   const btn = e.target.querySelector('button[type="submit"]');
   await conCargando(btn, 'Creando cuenta...', async () => {
@@ -1743,13 +1759,16 @@ async function cancelarCita(id, btn){
   const motivo = await pedirTextoModal('¿Por qué cancelás? (opcional). Esta acción no se puede deshacer.', {titulo:'Cancelar cita', textoConfirmar:'Sí, cancelar', placeholder:'Opcional'});
   if(motivo === null) return; // cerró el modal sin confirmar
   await conCargando(btn, 'Cancelando...', async () => {
-    await sb.from('citas').update({ estado:'cancelada', motivo_cancelacion: motivo.trim() || null, cancelada_por: sessionUserId }).eq('id', id);
+    const { error } = await sb.from('citas').update({ estado:'cancelada', motivo_cancelacion: motivo.trim() || null, cancelada_por: sessionUserId }).eq('id', id);
+    if(error){ mostrarToast('No se pudo cancelar la cita. Intenta de nuevo.', 'err'); return; }
+    mostrarToast('Cita cancelada.', 'ok');
     renderMisCitas();
   });
 }
 async function marcarCompletada(id, btn){
   await conCargando(btn, 'Guardando...', async () => {
-    await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
+    const { error } = await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
+    if(error){ mostrarToast('No se pudo marcar como completada. Intenta de nuevo.', 'err'); return; }
     renderMisCitas();
   });
 }
@@ -1813,6 +1832,10 @@ async function declararPago(){
   const file = input && input.files[0];
   if(!file){
     if(msgEl) msgEl.innerHTML = `<div class="msg err">Adjuntá el comprobante antes de enviar.</div>`;
+    return;
+  }
+  if(archivoDemasiadoGrande(file)){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">${MSG_ARCHIVO_GRANDE}</div>`;
     return;
   }
   const btn = document.getElementById('btn-declarar-pago');
@@ -1910,9 +1933,14 @@ async function enviarCalificacion(citaId, btn){
   const panel = document.getElementById('calificar-panel');
   const fotosInput = document.getElementById('calif-fotos');
   const archivos = fotosInput ? Array.from(fotosInput.files).slice(0, 4) : [];
+  const archivosGrandes = archivos.filter(archivoDemasiadoGrande).length;
+  if(archivosGrandes && panel){
+    panel.insertAdjacentHTML('afterbegin', `<div class="msg err">${archivosGrandes===1 ? 'Una foto pesa' : `${archivosGrandes} fotos pesan`} más de ${MAX_ARCHIVO_MB}MB y no se van a subir.</div>`);
+  }
   await conCargando(btn, 'Enviando...', async () => {
     const fotos = [];
     for(let i=0; i<archivos.length; i++){
+      if(archivoDemasiadoGrande(archivos[i])) continue;
       const ext = archivos[i].name.split('.').pop();
       const path = `${u.id}/${citaId}-${Date.now()}-${i}.${ext}`;
       const { error: upErr } = await sb.storage.from('resenas-fotos').upload(path, archivos[i]);
@@ -1930,7 +1958,9 @@ async function enviarCalificacion(citaId, btn){
       if(panel) panel.innerHTML = `<div class="msg err">No se pudo enviar la calificación: ${esc(error.message)}</div>`;
       return;
     }
-    await sb.from('citas').update({ calificacion: { estrellas: state.estrellasSel, comentario } }).eq('id', citaId);
+    const { error: citaErr } = await sb.from('citas').update({ calificacion: { estrellas: state.estrellasSel, comentario } }).eq('id', citaId);
+    if(citaErr) mostrarToast('Calificación guardada, pero no se pudo actualizar el resumen en la cita.', 'err');
+    else mostrarToast('Calificación enviada.', 'ok');
     invalidarPerfil(data.worker_id);
     renderMisCitas();
   });
@@ -1998,7 +2028,8 @@ async function enviarMensaje(citaId){
     const { data: citaRaw } = await sb.from('citas').select('*').eq('id', citaId).single();
     const c = normalizarCita(citaRaw);
     if(!c) return;
-    await sb.from('mensajes').insert({ cita_id: citaId, de: u.id, texto });
+    const { error } = await sb.from('mensajes').insert({ cita_id: citaId, de: u.id, texto });
+    if(error){ mostrarToast('No se pudo enviar el mensaje. Intenta de nuevo.', 'err'); return; }
     const otroId = u.tipo==='cliente' ? c.trabajadorId : c.clienteId;
     addNotificacion(otroId, `Nuevo mensaje de ${u.nombre.split(' ')[0]} sobre la cita del ${c.fecha}.`);
     input.value = '';
@@ -2061,7 +2092,8 @@ async function enviarMensajePrevio(conversacionId){
     const u = currentUser();
     const { data: conv } = await sb.from('conversaciones').select('*').eq('id', conversacionId).single();
     if(!conv) return;
-    await sb.from('mensajes').insert({ conversacion_id: conversacionId, de: u.id, texto });
+    const { error } = await sb.from('mensajes').insert({ conversacion_id: conversacionId, de: u.id, texto });
+    if(error){ mostrarToast('No se pudo enviar el mensaje. Intenta de nuevo.', 'err'); return; }
     const otroId = u.tipo==='cliente' ? conv.trabajador_id : conv.cliente_id;
     addNotificacion(otroId, `Nuevo mensaje de ${u.nombre.split(' ')[0]}.`);
     input.value = '';
@@ -2445,6 +2477,10 @@ async function subirFotoPerfil(){
     if(msgEl) msgEl.innerHTML = `<div class="msg err">Elegí un archivo de imagen.</div>`;
     return;
   }
+  if(archivoDemasiadoGrande(file)){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">${MSG_ARCHIVO_GRANDE}</div>`;
+    return;
+  }
   const ext = file.name.split('.').pop();
   const path = `${u.id}/avatar.${ext}`;
   const { error: upErr } = await sb.storage.from('avatares').upload(path, file, { upsert: true });
@@ -2453,7 +2489,11 @@ async function subirFotoPerfil(){
     return;
   }
   const { data: pub } = sb.storage.from('avatares').getPublicUrl(path);
-  await sb.from('profiles').update({ foto_url: pub.publicUrl }).eq('id', u.id);
+  const { error: updErr } = await sb.from('profiles').update({ foto_url: pub.publicUrl }).eq('id', u.id);
+  if(updErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">La foto se subió, pero no se pudo guardar en tu perfil: ${esc(updErr.message)}</div>`;
+    return;
+  }
   invalidarPerfil(u.id);
   renderTrabajo();
 }
@@ -2467,6 +2507,10 @@ async function solicitarVerificacion(btn){
     if(msgEl) msgEl.innerHTML = `<div class="msg err">Adjunta un documento antes de enviar la solicitud.</div>`;
     return;
   }
+  if(archivoDemasiadoGrande(file)){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">${MSG_ARCHIVO_GRANDE}</div>`;
+    return;
+  }
   await conCargando(btn, 'Enviando...', async () => {
     const ext = file.name.split('.').pop();
     const path = `${u.id}/${Date.now()}.${ext}`;
@@ -2477,7 +2521,7 @@ async function solicitarVerificacion(btn){
     }
     const tipoDoc = tipoSel ? tipoSel.value : null;
     const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'solicitada', tipo_doc: tipoDoc }];
-    await sb.from('profiles').update({
+    const { error: updErr } = await sb.from('profiles').update({
       verificacion_pendiente: true,
       verificacion_doc_path: path,
       verificacion_tipo_doc: tipoDoc,
@@ -2485,6 +2529,10 @@ async function solicitarVerificacion(btn){
       verificacion_motivo_rechazo: null,
       verificacion_historial: historial,
     }).eq('id', u.id);
+    if(updErr){
+      if(msgEl) msgEl.innerHTML = `<div class="msg err">El documento se subió, pero no se pudo registrar la solicitud: ${esc(updErr.message)}</div>`;
+      return;
+    }
     invalidarPerfil(u.id);
     renderTrabajo();
   });
@@ -2499,6 +2547,10 @@ async function subirFotoGaleria(){
     if(msgEl) msgEl.innerHTML = `<div class="msg err">Elegí un archivo de imagen.</div>`;
     return;
   }
+  if(archivoDemasiadoGrande(file)){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">${MSG_ARCHIVO_GRANDE}</div>`;
+    return;
+  }
   const ext = file.name.split('.').pop();
   const path = `${u.id}/${Date.now()}.${ext}`;
   const { error: upErr } = await sb.storage.from('portafolio').upload(path, file);
@@ -2508,7 +2560,11 @@ async function subirFotoGaleria(){
   }
   const { data: pub } = sb.storage.from('portafolio').getPublicUrl(path);
   const nuevaGaleria = [...(u.galeria_fotos||[]), pub.publicUrl];
-  await sb.from('profiles').update({ galeria_fotos: nuevaGaleria }).eq('id', u.id);
+  const { error: updErr } = await sb.from('profiles').update({ galeria_fotos: nuevaGaleria }).eq('id', u.id);
+  if(updErr){
+    if(msgEl) msgEl.innerHTML = `<div class="msg err">La foto se subió, pero no se pudo guardar en tu galería: ${esc(updErr.message)}</div>`;
+    return;
+  }
   u.galeria_fotos = nuevaGaleria;
   invalidarPerfil(u.id);
   input.value = '';
@@ -2518,7 +2574,8 @@ async function eliminarFotoGaleria(index){
   const u = currentUser();
   const nuevaGaleria = (u.galeria_fotos||[]).slice();
   nuevaGaleria.splice(index, 1);
-  await sb.from('profiles').update({ galeria_fotos: nuevaGaleria }).eq('id', u.id);
+  const { error } = await sb.from('profiles').update({ galeria_fotos: nuevaGaleria }).eq('id', u.id);
+  if(error){ mostrarToast('No se pudo eliminar la foto. Intenta de nuevo.', 'err'); return; }
   u.galeria_fotos = nuevaGaleria;
   invalidarPerfil(u.id);
   renderTrabajo();
@@ -2552,7 +2609,8 @@ async function eliminarResena(resenaId, workerId, btn){
 }
 async function responderCita(id, estado, btn){
   await conCargando(btn, estado==='aceptada' ? 'Aceptando...' : 'Rechazando...', async () => {
-    const { data: citaRaw } = await sb.from('citas').update({ estado }).eq('id', id).select().single();
+    const { data: citaRaw, error } = await sb.from('citas').update({ estado }).eq('id', id).select().single();
+    if(error){ mostrarToast(`No se pudo ${estado==='aceptada'?'aceptar':'rechazar'} la cita. Intenta de nuevo.`, 'err'); return; }
     const c = normalizarCita(citaRaw);
     if(c){
       const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
@@ -2566,7 +2624,8 @@ async function cancelarCitaTrabajador(id, btn){
   const motivo = await pedirTextoModal('¿Por qué cancelás? (opcional). Se le avisará al cliente.', {titulo:'Cancelar cita ya aceptada', textoConfirmar:'Sí, cancelar', placeholder:'Opcional'});
   if(motivo === null) return; // cerró el modal sin confirmar
   await conCargando(btn, 'Cancelando...', async () => {
-    const { data: citaRaw } = await sb.from('citas').update({ estado:'cancelada', motivo_cancelacion: motivo.trim() || null, cancelada_por: sessionUserId }).eq('id', id).select().single();
+    const { data: citaRaw, error } = await sb.from('citas').update({ estado:'cancelada', motivo_cancelacion: motivo.trim() || null, cancelada_por: sessionUserId }).eq('id', id).select().single();
+    if(error){ mostrarToast('No se pudo cancelar la cita. Intenta de nuevo.', 'err'); return; }
     const c = normalizarCita(citaRaw);
     if(c){
       const [cliente, w] = await Promise.all([obtenerPerfil(c.clienteId), obtenerPerfil(c.trabajadorId)]);
@@ -2609,6 +2668,11 @@ async function guardarPerfilTrabajador(btn){
     document.getElementById('wp-msg').innerHTML = `<div class="msg err" style="margin-top:12px;">La zona no puede quedar vacía.</div>`;
     return;
   }
+  const celularNuevo = document.getElementById('wp-celular').value.trim();
+  if(!celularValido(celularNuevo)){
+    document.getElementById('wp-msg').innerHTML = `<div class="msg err" style="margin-top:12px;">Ese celular no parece válido. Usa un número colombiano de 10 dígitos (ej. 3001234567).</div>`;
+    return;
+  }
   u.categoria = document.getElementById('wp-cat').value;
   u.zona = zona;
   u.experiencia = Math.max(0, Number(document.getElementById('wp-exp').value)||0);
@@ -2617,7 +2681,7 @@ async function guardarPerfilTrabajador(btn){
   u.radio_cobertura_km = document.getElementById('wp-radio-cobertura').value ? Math.max(0, Number(document.getElementById('wp-radio-cobertura').value)) : null;
   u.servicios = document.getElementById('wp-servicios').value.split(',').map(s=>s.trim()).filter(Boolean);
   u.datos_pago_texto = document.getElementById('wp-datos-pago').value.trim() || null;
-  u.celular = document.getElementById('wp-celular').value.trim() || null;
+  u.celular = celularNuevo || null;
   u.disponibilidad = state.wpDisponibilidad;
   await conCargando(btn, 'Guardando...', async () => {
     const { error } = await sb.from('profiles').update({
@@ -2735,7 +2799,8 @@ async function toggleEstadoUsuario(id, btn){
   if(!u) return;
   await conCargando(btn, 'Guardando...', async () => {
     const nuevoEstado = u.estado==='activo' ? 'bloqueado' : 'activo';
-    await sb.from('profiles').update({ estado: nuevoEstado }).eq('id', id);
+    const { error } = await sb.from('profiles').update({ estado: nuevoEstado }).eq('id', id);
+    if(error){ mostrarToast('No se pudo actualizar el estado del usuario.', 'err'); return; }
     invalidarPerfil(id);
     renderAdmin();
   });
@@ -2752,13 +2817,14 @@ async function verificarTrabajador(id, btn){
   if(!u) return;
   await conCargando(btn, 'Verificando...', async () => {
     const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'aprobada' }];
-    await sb.from('profiles').update({
+    const { error } = await sb.from('profiles').update({
       verificado: true,
       verificacion_pendiente: false,
       verificacion_rechazada: false,
       verificacion_motivo_rechazo: null,
       verificacion_historial: historial,
     }).eq('id', id);
+    if(error){ mostrarToast('No se pudo verificar al trabajador. Intenta de nuevo.', 'err'); return; }
     invalidarPerfil(id);
     addNotificacion(u.id, 'Tu perfil fue verificado por el administrador. Ya se muestra el distintivo ✓ Verificado.');
     mostrarToast(`${u.nombre.split(' ')[0]} fue verificado.`, 'ok');
@@ -2773,13 +2839,14 @@ async function rechazarVerificacion(id, btn){
   if(!motivo.trim()){ mostrarToast('Escribí un motivo para rechazar.', 'err'); return; }
   await conCargando(btn, 'Rechazando...', async () => {
     const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'rechazada', motivo: motivo.trim() }];
-    await sb.from('profiles').update({
+    const { error } = await sb.from('profiles').update({
       verificado: false,
       verificacion_pendiente: false,
       verificacion_rechazada: true,
       verificacion_motivo_rechazo: motivo.trim(),
       verificacion_historial: historial,
     }).eq('id', id);
+    if(error){ mostrarToast('No se pudo rechazar la verificación. Intenta de nuevo.', 'err'); return; }
     invalidarPerfil(id);
     addNotificacion(u.id, `Tu verificación fue rechazada: ${motivo.trim()}. Podés corregir el documento y volver a solicitarla desde tu perfil.`);
     mostrarToast(`Verificación de ${u.nombre.split(' ')[0]} rechazada.`, 'ok');
@@ -2788,7 +2855,8 @@ async function rechazarVerificacion(id, btn){
 }
 async function resolverReporte(id, btn){
   await conCargando(btn, 'Guardando...', async () => {
-    await sb.from('reportes').update({ estado: 'resuelto' }).eq('id', id);
+    const { error } = await sb.from('reportes').update({ estado: 'resuelto' }).eq('id', id);
+    if(error){ mostrarToast('No se pudo marcar el reporte como resuelto.', 'err'); return; }
     renderAdmin();
   });
 }

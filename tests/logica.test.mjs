@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   avg, diaSemanaDeFecha, calcularMonto, horasDisponiblesDia, insigniasTrabajador,
   parseFechaHoraCita, formatearFechaCita, calendarioMes, primerDiaDisponible,
-  calcularCompletitudPerfil,
+  calcularCompletitudPerfil, celularValido,
 } = require('../js/logica.js');
 
 test('avg: sin reseñas devuelve null', () => {
@@ -231,4 +231,25 @@ test('calcularCompletitudPerfil: una verificación pendiente ya cuenta como hech
 test('calcularCompletitudPerfil: disponibilidad con todos los días vacíos no cuenta', () => {
   const r = calcularCompletitudPerfil({ disponibilidad: { L: [], M: [] } });
   assert.ok(r.faltantes.some(f => f.anchor === 'wp-disponibilidad'));
+});
+
+test('celularValido: vacío es válido (el campo es opcional)', () => {
+  assert.equal(celularValido(''), true);
+  assert.equal(celularValido(null), true);
+  assert.equal(celularValido(undefined), true);
+});
+
+test('celularValido: acepta un celular colombiano de 10 dígitos, con o sin formato', () => {
+  assert.equal(celularValido('3001234567'), true);
+  assert.equal(celularValido('300 123 4567'), true);
+  assert.equal(celularValido('300-123-4567'), true);
+  assert.equal(celularValido('+57 300 123 4567'), true);
+  assert.equal(celularValido('573001234567'), true);
+});
+
+test('celularValido: rechaza números que no son celulares colombianos válidos', () => {
+  assert.equal(celularValido('12345'), false); // muy corto
+  assert.equal(celularValido('6011234567'), false); // fijo (empieza en 6, no 3)
+  assert.equal(celularValido('30012345678'), false); // un dígito de más
+  assert.equal(celularValido('abcdefghij'), false); // no son dígitos
 });
