@@ -535,11 +535,18 @@ function avatarImgError(img){
   const cont = img.closest('.avatar');
   if(cont) cont.outerHTML = avatarFallbackHTML(img.getAttribute('data-nombre') || '');
 }
+// Se llama desde el onload: un archivo corrupto o mal subido (ej. 1×1 px) carga
+// "bien" para el navegador —no dispara onerror— pero se ve como un bloque de
+// color sólido al estirarse con object-fit:cover. 20px es generoso: cualquier
+// foto real de perfil mide muchísimo más en cualquiera de los dos ejes.
+function avatarImgCargada(img){
+  if(img.naturalWidth < 20 || img.naturalHeight < 20) avatarImgError(img);
+}
 function avatarHTML(nombre, fotoUrl){
   if(fotoUrl){
     return `<div class="avatar" style="padding:0;"><img src="${esc(fotoUrl)}" alt="" loading="lazy" data-nombre="${esc(nombre||'')}"
       style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;"
-      onerror="avatarImgError(this)"></div>`;
+      onerror="avatarImgError(this)" onload="avatarImgCargada(this)"></div>`;
   }
   return avatarFallbackHTML(nombre);
 }
@@ -2576,12 +2583,16 @@ async function abrirComprobante(citaId){
   if(!c){ win.close(); return; }
   const [w, cliente] = await Promise.all([obtenerPerfil(c.trabajadorId), obtenerPerfil(c.clienteId)]);
   win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Comprobante Hogandia</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
   <style>
-    body{font-family:Arial,sans-serif; padding:28px; color:#14201B;}
-    h1{font-size:18px; margin-bottom:4px;} .sub{color:#5B6A66; font-size:12px; margin-bottom:20px;}
-    .row{display:flex; justify-content:space-between; border-bottom:1px dashed #DCDFDE; padding:10px 0; font-size:13px;}
-    .row b{color:#1C2B39;}
-    .stamp{margin-top:20px; padding:10px; background:#EAF3EC; color:#3F7D58; text-align:center; border-radius:8px; font-weight:bold;}
+    body{font-family:'IBM Plex Mono',monospace; padding:28px; color:#14201B;}
+    h1{font-family:'Space Grotesk',sans-serif; font-size:18px; color:#1C2B39; margin-bottom:4px;}
+    .sub{color:#5B6A66; font-size:11px; letter-spacing:0.04em; margin-bottom:20px;}
+    .row{display:flex; justify-content:space-between; border-bottom:1px dashed #E4DFD5; padding:10px 0; font-size:12.5px;}
+    .row span{color:#5B6A66; text-transform:uppercase; letter-spacing:0.05em; font-size:10.5px;}
+    .row b{font-family:'Space Grotesk',sans-serif; color:#1C2B39; font-weight:700;}
+    .stamp{margin-top:20px; padding:10px; background:#EAF3EC; color:#3F7D58; text-align:center; border-radius:8px; font-weight:600; font-size:11.5px;}
   </style></head><body>
   <h1>Hogandia — Orden de servicio</h1>
   <div class="sub">N° ${c.id.toUpperCase()}</div>
@@ -2594,7 +2605,11 @@ async function abrirComprobante(citaId){
   <div class="row"><span>Estado</span><b>${esc(c.estado)}</b></div>
   <div class="row"><span>Pago</span><b>${esc(c.pago)}</b></div>
   <div class="stamp">Documento generado por Hogandia — comprobante no oficial</div>
-  <script>window.onload = () => window.print();</script>
+  <script>
+    // Imprimir solo cuando la tipografía ya cargó: si se imprime antes, el
+    // diálogo de impresión captura el fallback del sistema, no la de marca.
+    (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => window.print());
+  </script>
   </body></html>`);
   win.document.close();
 }
