@@ -60,6 +60,15 @@ Deno.serve(async (req) => {
 
     const mensaje = `Hola ${perfil.nombre?.split(' ')[0] ?? ''}, ${notificacion.texto}`;
 
+    // El celular se guarda como 10 dígitos colombianos sin indicativo (validado
+    // en el frontend por celularValido() en js/logica.js, ej. "3001234567").
+    // Twilio y Meta exigen E.164 completo ("+573001234567"); si ya viene con
+    // "+" o con el "57" puesto no se lo duplica.
+    const soloDigitos = (perfil.celular ?? '').replace(/\D/g, '');
+    const celularE164 = perfil.celular?.trim().startsWith('+')
+      ? perfil.celular.trim()
+      : `+${soloDigitos.startsWith('57') ? soloDigitos : `57${soloDigitos}`}`;
+
     if (tieneTwilio) {
       // --- Twilio WhatsApp API ---
       // Docs: https://www.twilio.com/docs/whatsapp/api
@@ -73,7 +82,7 @@ Deno.serve(async (req) => {
         },
         body: new URLSearchParams({
           From: TWILIO_WHATSAPP_FROM!,
-          To: `whatsapp:${perfil.celular}`,
+          To: `whatsapp:${celularE164}`,
           Body: mensaje,
         }),
       });
@@ -97,7 +106,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
-        to: perfil.celular,
+        to: celularE164.replace('+', ''), // Meta pide el número sin "+"
         type: 'text',
         text: { body: mensaje },
       }),
