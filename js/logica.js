@@ -4,6 +4,40 @@
 // como globales (mismo nombre que tenían antes en app.js, así los call sites
 // existentes no cambian).
 
+/* ---------------- ZONAS (comunas reales de Ibagué) ---------------- */
+
+// Las 13 comunas urbanas oficiales de Ibagué, con el centroide real de cada
+// una (geocodificado con Nominatim/OpenStreetMap — la misma fuente que ya
+// usan los mapas de la app, no coordenadas inventadas). Reemplaza la lista
+// vieja de solo 3 zonas + una posición pseudo-aleatoria para todo lo demás:
+// con eso, cualquier trabajador que no escribiera "Centro", "Norte" o
+// "Ambalá" exactamente terminaba con un punto inventado en el mapa.
+const ZONAS_IBAGUE = [
+  { nombre: 'Comuna 1 - Centro',         lat: 4.4434102, lng: -75.2411640 },
+  { nombre: 'Comuna 2 - Calambeo',       lat: 4.4507205, lng: -75.2413359 },
+  { nombre: 'Comuna 3 - San Simón',      lat: 4.4451328, lng: -75.2239829 },
+  { nombre: 'Comuna 4 - Piedrapintada',  lat: 4.4413206, lng: -75.2101570 },
+  { nombre: 'Comuna 5 - Jordán',         lat: 4.4412533, lng: -75.1960645 },
+  { nombre: 'Comuna 6 - Vergel',         lat: 4.4491414, lng: -75.1916878 },
+  { nombre: 'Comuna 7 - Salado',         lat: 4.4497665, lng: -75.1457333 },
+  { nombre: 'Comuna 8 - Ciudadela',      lat: 4.4381302, lng: -75.1718938 },
+  { nombre: 'Comuna 9 - Picaleña',       lat: 4.4299555, lng: -75.1929699 },
+  { nombre: 'Comuna 10 - Estadio',       lat: 4.4327819, lng: -75.2201823 },
+  { nombre: 'Comuna 11 - Ferias',        lat: 4.4277603, lng: -75.2265777 },
+  { nombre: 'Comuna 12 - Ricaurte',      lat: 4.4309821, lng: -75.2416485 },
+  { nombre: 'Comuna 13 - Boquerón',      lat: 4.4200780, lng: -75.2541567 },
+  { nombre: 'Zona rural / corregimiento', lat: 4.4389, lng: -75.2003 },
+];
+
+// Coordenadas de una zona por nombre exacto (como las guarda el <select> de
+// zona). Si no hay match — por ejemplo un perfil viejo con texto libre de
+// antes de este cambio — devuelve null en vez de inventar un punto: mejor
+// reconocer que no sabemos dónde queda, que mostrar un lugar falso.
+function coordsZonaIbague(nombreZona){
+  const z = ZONAS_IBAGUE.find(z => z.nombre === nombreZona);
+  return z ? [z.lat, z.lng] : null;
+}
+
 /* ---------------- CALIFICACIONES E INSIGNIAS ---------------- */
 
 function avg(resenas){
@@ -176,6 +210,7 @@ if (typeof module !== 'undefined' && module.exports) {
     calendarioMes, primerDiaDisponible,
     calcularMonto, calcularCompletitudPerfil,
     celularValido,
+    ZONAS_IBAGUE, coordsZonaIbague,
   };
 } else {
   window.avg = avg;
@@ -189,4 +224,6 @@ if (typeof module !== 'undefined' && module.exports) {
   window.calcularMonto = calcularMonto;
   window.calcularCompletitudPerfil = calcularCompletitudPerfil;
   window.celularValido = celularValido;
+  window.ZONAS_IBAGUE = ZONAS_IBAGUE;
+  window.coordsZonaIbague = coordsZonaIbague;
 }

@@ -247,6 +247,29 @@
             </select>
           </div>
           <div class="field"><label for="reg-tarifa">Tarifa desde (COP)</label><input type="number" id="reg-tarifa" min="0" placeholder="30000"></div>
+          <div class="field"><label for="reg-zona">Zona de Ibagué donde trabajás</label>
+            <select id="reg-zona">
+              <option value="">Elegí tu comuna...</option>
+              <option value="Comuna 1 - Centro">Comuna 1 - Centro</option>
+              <option value="Comuna 2 - Calambeo">Comuna 2 - Calambeo</option>
+              <option value="Comuna 3 - San Simón">Comuna 3 - San Simón</option>
+              <option value="Comuna 4 - Piedrapintada">Comuna 4 - Piedrapintada</option>
+              <option value="Comuna 5 - Jordán">Comuna 5 - Jordán</option>
+              <option value="Comuna 6 - Vergel">Comuna 6 - Vergel</option>
+              <option value="Comuna 7 - Salado">Comuna 7 - Salado</option>
+              <option value="Comuna 8 - Ciudadela">Comuna 8 - Ciudadela</option>
+              <option value="Comuna 9 - Picaleña">Comuna 9 - Picaleña</option>
+              <option value="Comuna 10 - Estadio">Comuna 10 - Estadio</option>
+              <option value="Comuna 11 - Ferias">Comuna 11 - Ferias</option>
+              <option value="Comuna 12 - Ricaurte">Comuna 12 - Ricaurte</option>
+              <option value="Comuna 13 - Boquerón">Comuna 13 - Boquerón</option>
+              <option value="Zona rural / corregimiento">Zona rural / corregimiento</option>
+            </select>
+          </div>
+          <div class="field">
+            <button type="button" class="btn btn-outline" id="btn-reg-ubicacion" style="width:100%;" onclick="usarMiUbicacionEnRegistro()">📍 Compartir mi ubicación exacta (opcional)</button>
+            <p id="reg-ubicacion-msg" style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">Ayuda a que los clientes cercanos te encuentren primero. Se guarda con un margen de seguridad, nunca tu dirección exacta.</p>
+          </div>
         </div>
         <div class="field">
           <label style="display:flex; align-items:flex-start; gap:8px; font-weight:400; font-size:12.5px; color:var(--ink-soft);">
@@ -426,6 +449,7 @@
     <div id="ubicacion-msg" role="status" aria-live="polite"></div>
     <div class="chipbar" id="buscar-chips"></div>
     <div class="chipbar" id="buscar-servicios-chips" style="margin-top:-14px;"></div>
+    <div class="chipbar" id="buscar-zona-chips" style="margin-top:-14px;"></div>
     <div class="results-summary" id="buscar-summary" role="status" aria-live="polite"></div>
     <div class="map-toggle" role="group" aria-label="Forma de ver los resultados">
       <button id="btn-vista-lista" class="on" aria-pressed="true" onclick="setVistaBuscar('lista')">Lista</button>

@@ -257,7 +257,7 @@ const MSG_ARCHIVO_GRANDE = `El archivo pesa más de ${MAX_ARCHIVO_MB}MB. Elegí 
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, servicioFiltro:null, workerActual:null, workerPerfil:null, workerPerfilError:false, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[] };
+let state = { catFiltro:null, servicioFiltro:null, zonaFiltro:null, workerActual:null, workerPerfil:null, workerPerfilError:false, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[], regUbicacion:null };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -293,22 +293,25 @@ const ICONO_DISPONIBLE = '<svg width="9" height="9" viewBox="0 0 9 9" style="ver
 const ICONO_UBICACION = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px;flex-shrink:0;" aria-hidden="true"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>';
 
 /* ---------------- MAPA (zonas de Ibagué) ---------------- */
-// Coordenadas aproximadas a nivel de zona (no la dirección exacta del trabajador).
+// Coordenadas aproximadas a nivel de zona. ZONAS_IBAGUE y coordsZonaIbague
+// viven en js/logica.js (las 13 comunas reales de Ibagué, geocodificadas con
+// Nominatim/OpenStreetMap). Perfiles de antes de este cambio pueden tener
+// texto libre que no matchea ninguna comuna — ahí coordsForZona cae al
+// centro de la ciudad en vez de inventar una posición, como hacía antes.
 const IBAGUE_CENTRO = [4.4389, -75.2003];
-const ZONAS = {
-  'Centro': [4.4389, -75.2003],
-  'Norte': [4.4650, -75.1950],
-  'Ambalá': [4.4750, -75.1900],
-  'Sin definir': IBAGUE_CENTRO
-};
 function coordsForZona(zona){
-  if(ZONAS[zona]) return ZONAS[zona];
-  // zona escrita libremente por el trabajador: se ubica cerca del centro,
-  // con un desplazamiento estable (siempre el mismo punto para la misma zona)
-  let hash = 0;
-  for(let i=0;i<(zona||'').length;i++) hash = (hash*31 + zona.charCodeAt(i)) % 1000;
-  const jitter = (hash/1000 - 0.5) * 0.03;
-  return [IBAGUE_CENTRO[0]+jitter, IBAGUE_CENTRO[1]-jitter];
+  return coordsZonaIbague(zona) || IBAGUE_CENTRO;
+}
+// <option>s del selector de zona, para el perfil del trabajador. Si el valor
+// actual es texto libre de antes de este cambio (no matchea ninguna comuna),
+// se agrega como opción extra al final para no perder ni reescribir en
+// silencio el dato que ya tenía guardado.
+function zonaOptionsHTML(seleccionada){
+  const esConocida = ZONAS_IBAGUE.some(z => z.nombre === seleccionada);
+  const extra = (seleccionada && !esConocida)
+    ? `<option value="${esc(seleccionada)}" selected>${esc(seleccionada)} (sin ubicar en el mapa)</option>` : '';
+  return `<option value="">Elegí tu comuna...</option>` + extra +
+    ZONAS_IBAGUE.map(z => `<option value="${esc(z.nombre)}"${z.nombre===seleccionada?' selected':''}>${esc(z.nombre)}</option>`).join('');
 }
 // Usa la ubicación real del trabajador (lat/lng) si la definió; si no,
 // cae al punto aproximado por nombre de zona.
@@ -354,6 +357,35 @@ function obtenerMiUbicacion(){
     }
   );
 }
+// Desplazamiento aleatorio de ~100-150 m sobre una coordenada real: precisa
+// para "cerca de mí", pero nunca la dirección exacta de la casa de alguien.
+function conJitterPrivacidad(lat, lng){
+  const jitter = () => (Math.random()-0.5) * 0.0025;
+  return { lat: lat + jitter(), lng: lng + jitter() };
+}
+// Captura la ubicación del navegador durante el registro (antes de que exista
+// la cuenta) y la deja guardada en state.regUbicacion para que doRegister la
+// incluya al crear el perfil. No escribe nada en la base todavía.
+function usarMiUbicacionEnRegistro(){
+  const msgEl = document.getElementById('reg-ubicacion-msg');
+  if(!navigator.geolocation){
+    if(msgEl) msgEl.textContent = 'Tu navegador no soporta ubicación.';
+    return;
+  }
+  const btn = document.getElementById('btn-reg-ubicacion');
+  if(btn){ btn.disabled = true; btn.textContent = 'Ubicando...'; }
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      state.regUbicacion = conJitterPrivacidad(pos.coords.latitude, pos.coords.longitude);
+      if(btn){ btn.disabled = false; btn.textContent = '✓ Ubicación lista'; }
+      if(msgEl) msgEl.textContent = 'Listo — se guarda cuando crees la cuenta.';
+    },
+    ()=>{
+      if(btn){ btn.disabled = false; btn.textContent = '📍 Compartir mi ubicación exacta (opcional)'; }
+      if(msgEl) msgEl.textContent = 'No pudimos acceder a tu ubicación. Podés definir tu zona desde tu perfil después.';
+    }
+  );
+}
 async function usarMiUbicacionComoTrabajador(){
   const u = currentUser();
   const msgEl = document.getElementById('wp-ubicacion-msg');
@@ -365,11 +397,7 @@ async function usarMiUbicacionComoTrabajador(){
   if(btn){ btn.disabled = true; btn.textContent = 'Ubicando...'; }
   navigator.geolocation.getCurrentPosition(
     async pos=>{
-      // Desplazamiento aleatorio de ~100-150 m: precisa para "cerca de mí",
-      // pero nunca la dirección exacta de la casa del trabajador.
-      const jitter = () => (Math.random()-0.5) * 0.0025;
-      const lat = pos.coords.latitude + jitter();
-      const lng = pos.coords.longitude + jitter();
+      const { lat, lng } = conJitterPrivacidad(pos.coords.latitude, pos.coords.longitude);
       const { error } = await sb.from('profiles').update({ lat, lng }).eq('id', u.id);
       if(btn){ btn.disabled = false; }
       if(error){
@@ -1090,14 +1118,20 @@ async function doRegister(e){
     if(tipo==='trabajador'){
       nuevoPerfil.categoria = document.getElementById('reg-cat').value;
       nuevoPerfil.tarifa = Math.max(0, Number(document.getElementById('reg-tarifa').value)||25000);
-      nuevoPerfil.experiencia = 0; nuevoPerfil.zona = 'Sin definir';
+      nuevoPerfil.experiencia = 0;
+      nuevoPerfil.zona = document.getElementById('reg-zona').value || 'Sin definir';
       nuevoPerfil.servicios = []; nuevoPerfil.disponibilidad = disponibilidadPorDefecto();
+      if(state.regUbicacion){
+        nuevoPerfil.lat = state.regUbicacion.lat;
+        nuevoPerfil.lng = state.regUbicacion.lng;
+      }
     }
     const { error: perfilError } = await sb.from('profiles').insert(nuevoPerfil);
     if(perfilError){
       msg.innerHTML = `<div class="msg err">Cuenta creada, pero hubo un problema guardando el perfil: ${esc(perfilError.message)}</div>`;
       return;
     }
+    state.regUbicacion = null;
     sessionUserId = data.user.id;
     await cargarPerfilActual();
     nav(tipo==='trabajador' ? 'trabajo' : 'home');
@@ -1167,6 +1201,21 @@ async function renderBuscar(){
   }
   if(state.servicioFiltro) results = results.filter(w=>(w.servicios||[]).some(s=>s.trim()===state.servicioFiltro));
 
+  // Chips de zona: igual que las de especialidad, se calculan antes de aplicar
+  // el propio filtro de zona para que el chip elegido no desaparezca.
+  const zonaBox = document.getElementById('buscar-zona-chips');
+  if(zonaBox){
+    const zonasPresentes = [...new Set(results.map(w=>(w.zona||'').trim()).filter(z=>z && z!=='Sin definir'))]
+      .sort((a,b)=>{
+        const ia = ZONAS_IBAGUE.findIndex(z=>z.nombre===a), ib = ZONAS_IBAGUE.findIndex(z=>z.nombre===b);
+        return (ia<0?999:ia) - (ib<0?999:ib);
+      });
+    zonaBox.innerHTML = zonasPresentes.length ? zonasPresentes.map(z=>
+      `<button type="button" class="chipbtn sm ${state.zonaFiltro===z?'on':''}" aria-pressed="${state.zonaFiltro===z}" onclick="setZonaFiltro(${esc(JSON.stringify(z))})">📍 ${esc(z)}</button>`
+    ).join('') : '';
+  }
+  if(state.zonaFiltro) results = results.filter(w=>(w.zona||'').trim()===state.zonaFiltro);
+
   if(q) results = results.filter(w=>coincideBusqueda(w, q));
   if(state.miUbicacion && state.radioFiltro){
     results = results.filter(w=>distanciaKm(state.miUbicacion, coordsForWorker(w)) <= state.radioFiltro);
@@ -1207,6 +1256,7 @@ function renderResumenBuscar(results, q){
   const activos = [];
   if(state.catFiltro) activos.push({tipo:'cat', label:state.catFiltro});
   if(state.servicioFiltro) activos.push({tipo:'servicio', label:state.servicioFiltro});
+  if(state.zonaFiltro) activos.push({tipo:'zona', label:state.zonaFiltro});
   if(state.filtroDisponibleAhora) activos.push({tipo:'disponible', label:'Disponible ahora'});
   if(state.radioFiltro) activos.push({tipo:'radio', label:`Hasta ${state.radioFiltro} km`});
   if(q) activos.push({tipo:'texto', label:`“${q}”`});
@@ -1224,6 +1274,7 @@ function renderResumenBuscar(results, q){
 function limpiarFiltrosBuscar(){
   state.catFiltro = null;
   state.servicioFiltro = null;
+  state.zonaFiltro = null;
   state.filtroDisponibleAhora = false;
   state.radioFiltro = null;
   const inputTexto = document.getElementById('buscar-text');
@@ -1236,6 +1287,7 @@ function limpiarFiltrosBuscar(){
 }
 function setCatFiltro(cat){ state.catFiltro = cat || null; state.servicioFiltro = null; renderBuscar(); }
 function setServicioFiltro(s){ state.servicioFiltro = state.servicioFiltro===s ? null : s; renderBuscar(); }
+function setZonaFiltro(z){ state.zonaFiltro = state.zonaFiltro===z ? null : z; renderBuscar(); }
 function setRadioFiltro(v){ state.radioFiltro = v ? Number(v) : null; renderBuscar(); }
 function toggleComparar(workerId, marcado){
   if(marcado){
@@ -2367,7 +2419,7 @@ async function renderTrabajo(){
       <div class="field"><label for="wp-cat">Categoría</label>
         <select id="wp-cat" onchange="renderSugerenciasServicios()">${CATS.map(c=>`<option ${c.n===u.categoria?'selected':''}>${c.n}</option>`).join('')}</select>
       </div>
-      <div class="field"><label for="wp-zona">Zona</label><input id="wp-zona" value="${esc(u.zona)}"></div>
+      <div class="field"><label for="wp-zona">Zona</label><select id="wp-zona">${zonaOptionsHTML(u.zona)}</select></div>
       <div class="field">
         <button type="button" class="btn ${u.disponible_ahora?'btn-primary':'btn-outline'}" onclick="toggleDisponibleAhora()">${ICONO_DISPONIBLE}${u.disponible_ahora ? 'Disponible ahora (tocá para desactivar)' : 'Marcarme disponible ahora'}</button>
         <p style="font-size:11.5px; color:var(--ink-soft); margin-top:6px;">Activalo para que los clientes vean que podés atender pedidos urgentes hoy mismo. Acordate de desactivarlo cuando ya no puedas.</p>

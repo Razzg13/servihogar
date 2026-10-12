@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   avg, diaSemanaDeFecha, calcularMonto, horasDisponiblesDia, insigniasTrabajador,
   parseFechaHoraCita, formatearFechaCita, calendarioMes, primerDiaDisponible,
-  calcularCompletitudPerfil, celularValido,
+  calcularCompletitudPerfil, celularValido, ZONAS_IBAGUE, coordsZonaIbague,
 } = require('../js/logica.js');
 
 test('avg: sin reseñas devuelve null', () => {
@@ -252,4 +252,28 @@ test('celularValido: rechaza números que no son celulares colombianos válidos'
   assert.equal(celularValido('6011234567'), false); // fijo (empieza en 6, no 3)
   assert.equal(celularValido('30012345678'), false); // un dígito de más
   assert.equal(celularValido('abcdefghij'), false); // no son dígitos
+});
+
+test('ZONAS_IBAGUE: tiene las 13 comunas reales más la zona rural, sin duplicados', () => {
+  assert.equal(ZONAS_IBAGUE.length, 14);
+  const nombres = ZONAS_IBAGUE.map(z => z.nombre);
+  assert.equal(new Set(nombres).size, nombres.length);
+  ZONAS_IBAGUE.forEach(z => {
+    assert.ok(Number.isFinite(z.lat) && Math.abs(z.lat) <= 90);
+    assert.ok(Number.isFinite(z.lng) && Math.abs(z.lng) <= 180);
+  });
+});
+
+test('coordsZonaIbague: devuelve coordenadas reales para una comuna conocida', () => {
+  const c = coordsZonaIbague('Comuna 5 - Jordán');
+  assert.ok(c);
+  assert.equal(c[0], 4.4412533);
+  assert.equal(c[1], -75.1960645);
+});
+
+test('coordsZonaIbague: devuelve null (no inventa una posición) para texto que no matchea ninguna comuna', () => {
+  assert.equal(coordsZonaIbague('Sin definir'), null);
+  assert.equal(coordsZonaIbague('cerca del parque, como a dos cuadras'), null);
+  assert.equal(coordsZonaIbague(''), null);
+  assert.equal(coordsZonaIbague(undefined), null);
 });
