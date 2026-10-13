@@ -319,6 +319,13 @@ function coordsForWorker(w){
   if(w.lat!=null && w.lng!=null) return [w.lat, w.lng];
   return coordsForZona(w.zona);
 }
+// true si el pin que se va a dibujar representa un dato real (coordenadas
+// propias o una comuna reconocida), no el centro de la ciudad como relleno.
+// Sin esto, un trabajador sin zona definida mostraba un pin igual de preciso
+// que uno con dirección real — contradice lo que la propia ficha ya admite.
+function tieneUbicacionReal(w){
+  return (w.lat!=null && w.lng!=null) || !!coordsZonaIbague(w.zona);
+}
 // Distancia en km entre dos puntos [lat, lng] (fórmula de Haversine)
 function distanciaKm([lat1, lng1], [lat2, lng2]){
   const R = 6371;
@@ -1358,7 +1365,14 @@ async function doLogin(e){
       return;
     }
     msg.innerHTML='';
-    nav(currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home');
+    if(currentProfile.tipo==='cliente' && state.pendingAgendarWorkerId){
+      const workerId = state.pendingAgendarWorkerId;
+      state.pendingAgendarWorkerId = null;
+      irAAgendar(workerId);
+    } else {
+      state.pendingAgendarWorkerId = null;
+      nav(currentProfile.tipo==='trabajador' ? 'trabajo' : currentProfile.tipo==='admin' ? 'admin' : 'home');
+    }
     suscribirNotificaciones(currentProfile.id);
     const { data: pendientes } = await sb.from('notificaciones').select('*').eq('user_id', currentProfile.id).eq('leida', false);
     if(pendientes && pendientes.length===1) mostrarToast(pendientes[0].texto, 'info');
@@ -1414,7 +1428,14 @@ async function doRegister(e){
     state.regUbicacion = null;
     sessionUserId = data.user.id;
     await cargarPerfilActual();
-    nav(tipo==='trabajador' ? 'trabajo' : 'home');
+    if(tipo==='cliente' && state.pendingAgendarWorkerId){
+      const workerId = state.pendingAgendarWorkerId;
+      state.pendingAgendarWorkerId = null;
+      irAAgendar(workerId);
+    } else {
+      state.pendingAgendarWorkerId = null;
+      nav(tipo==='trabajador' ? 'trabajo' : 'home');
+    }
     suscribirNotificaciones(sessionUserId);
   });
   return false;
@@ -1423,6 +1444,7 @@ async function logout(){
   await sb.auth.signOut();
   sessionUserId = null; currentProfile = null;
   perfilesCache.clear(); trabajadoresListaCache = null;
+  state.pendingAgendarWorkerId = null;
   cerrarCanalChat(); cerrarCanalNotif();
   nav('home');
 }
@@ -1764,22 +1786,26 @@ async function verPerfil(workerId){
           </div>`).join('') : '<p style="font-size:13px;color:var(--ink-soft);">Todavía no tiene comentarios.</p>'}
         </div>
       </div>
-      <div>
+      <div class="perfil-sidebar">
         <div class="card" style="margin-bottom:16px;">
           <h3 style="font-size:14px; margin-bottom:12px;">Solicitar este servicio</h3>
           <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:16px;">Elige un día y una hora para que ${esc(w.nombre.split(' ')[0])} confirme tu cita.</p>
+          ${!w.verificado && !w.resenas.length ? `<p style="font-size:11.5px; color:var(--orange-deep); background:rgba(232,117,44,0.1); padding:8px 10px; border-radius:8px; margin-bottom:12px;">ℹ️ ${esc(w.nombre.split(' ')[0])} es nuevo en Hogandia — todavía sin reseñas ni verificación de identidad.</p>` : ''}
           <button class="btn btn-primary" style="width:100%;" onclick="irAAgendar('${w.id}')">Agendar cita</button>
           ${u && u.tipo==='cliente' ? `<button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="contactarTrabajador('${w.id}', this)">💬 Preguntar antes de agendar</button>` : ''}
           <div id="perfil-chat-panel" style="margin-top:12px;"></div>
         </div>
         <div class="card">
           <h3 style="font-size:14px; margin-bottom:10px;">Zona de trabajo</h3>
+          ${tieneUbicacionReal(w) ? `
           <div class="map-box" id="perfil-mapa"></div>
           <div class="map-caption"><span>${esc(w.zona)}, Ibagué</span><span>${w.radio_cobertura_km ? `Cobertura: ${w.radio_cobertura_km} km` : 'Ubicación aproximada'}</span></div>
+          ` : `<div class="empty-note" style="padding:24px 12px;">Este trabajador todavía no definió su zona — no podemos mostrar un mapa preciso.</div>`}
         </div>
       </div>
     </div>
-    ${similares.length ? `<div class="section-title"><h2>Trabajadores similares</h2></div><div class="worker-grid">${similares.map(x=>workerCardHTML(x)).join('')}</div>` : ''}`;
+    ${similares.length ? `<div class="section-title"><h2>Trabajadores similares</h2></div><div class="worker-grid">${similares.map(x=>workerCardHTML(x)).join('')}</div>` : ''}
+    <div class="perfil-cta-mobile"><button class="btn btn-primary" onclick="irAAgendar('${w.id}')">Agendar con ${esc(w.nombre.split(' ')[0])}</button></div>`;
   initMapaPerfil(w);
 }
 async function compartirPerfil(workerId){
@@ -1798,6 +1824,7 @@ async function compartirPerfil(workerId){
 }
 
 function initMapaPerfil(w){
+  if(!tieneUbicacionReal(w)) return; // el mapa ni se renderiza acá (ver perfil-content)
   const coords = coordsForWorker(w);
   if(mapPerfil){ mapPerfil.remove(); mapPerfil = null; }
   mapPerfil = L.map('perfil-mapa', {zoomControl:false, attributionControl:false}).setView(coords, 13);
@@ -1817,6 +1844,11 @@ function initMapaPerfil(w){
 async function irAAgendar(workerId){
   const u = currentUser();
   if(!u || u.tipo!=='cliente'){
+    // Sin esto, alguien que encuentra al trabajador correcto, se loguea, y
+    // vuelve a la home a buscar todo de nuevo — justo en el momento que más
+    // le importa al negocio (una cita agendada). doLogin()/doRegister()
+    // retoman este trabajador apenas la sesión queda activa.
+    state.pendingAgendarWorkerId = workerId;
     nav('auth'); switchAuthTab('login');
     document.getElementById('auth-msg').innerHTML = `<div class="msg err">Inicia sesión como cliente para agendar una cita.</div>`;
     return;

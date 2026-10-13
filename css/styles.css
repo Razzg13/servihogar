@@ -8,11 +8,17 @@
     --ink:#14201B; --ink-soft:#5B6A66; --line:#E4DFD5; --shadow:0 4px 10px -4px rgba(28,43,57,0.10), 0 20px 40px -24px rgba(28,43,57,0.22);
     --ease-out:cubic-bezier(0.23,1,0.32,1);
     --steps-bg:linear-gradient(120deg,#EAF3EC 0%,#F3F1E4 100%);
+    /* --green da solo 4.0:1 sobre su propio fondo tintado (#EAF3EC) — por
+       debajo del 4.5:1 de WCAG AA para texto. --green-text es la variante
+       para texto (badges, pills, status), más oscura en claro y más clara en
+       oscuro; --green sigue igual para usos no textuales (barras, íconos). */
+    --green-text:#2E6B4C;
   }
   [data-theme="dark"]{
     --paper:#0F1720; --card:#182530; --ink:#E7ECEE; --ink-soft:#93A3AC; --line:#2B3A45;
     --navy:#E7ECEE; --navy-deep:#080D12;
     --steps-bg:linear-gradient(120deg,#15242A 0%,#141E27 100%);
+    --green-text:#7FD9A0;
   }
   [data-theme="dark"] .card, [data-theme="dark"] .svc-card, [data-theme="dark"] .pro-card,
   [data-theme="dark"] table, [data-theme="dark"] .cal, [data-theme="dark"] .form-card,
@@ -127,9 +133,9 @@
   .worker-grid > *:nth-child(6){animation-delay:200ms;}
 
   .avatar{width:48px;height:48px;border-radius:11px;background:linear-gradient(145deg,#3a4f60,var(--navy)); flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; font-family:'IBM Plex Serif',serif; font-weight:700; font-size:16px; letter-spacing:0.02em; text-transform:uppercase;}
-  .rating-pill{font-family:'IBM Plex Mono'; font-size:11.5px; font-weight:600; background:#EAF3EC; color:var(--green); padding:4px 8px; border-radius:8px; display:inline-flex; align-items:center; width:fit-content;}
+  .rating-pill{font-family:'IBM Plex Mono'; font-size:11.5px; font-weight:600; background:#EAF3EC; color:var(--green-text); padding:4px 8px; border-radius:8px; display:inline-flex; align-items:center; width:fit-content;}
   .rating-pill.dist{background:rgba(232,117,44,0.14); color:var(--orange-deep);}
-  .rating-pill.disp-ahora{background:rgba(63,125,88,0.16); color:var(--green);}
+  .rating-pill.disp-ahora{background:rgba(63,125,88,0.16); color:var(--green-text);}
   [data-theme="dark"] .rating-pill{background:rgba(63,125,88,0.18);}
   [data-theme="dark"] .rating-pill.dist{background:rgba(232,117,44,0.20);}
   .compare-check{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft); cursor:pointer;}
@@ -137,7 +143,7 @@
   #comparador-bar{position:sticky; bottom:16px; margin-top:16px; margin-bottom:env(safe-area-inset-bottom, 0px); background:var(--navy); color:#fff; padding:12px 16px; border-radius:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; box-shadow:0 16px 32px -12px rgba(0,0,0,0.35); font-size:13px;}
   [data-theme="dark"] #comparador-bar{background:var(--navy-deep); border:1px solid var(--line);}
   .badge-off{background:#F3E3E0; color:var(--red);}
-  .verif-badge{display:inline-block; font-family:'IBM Plex Mono'; font-size:10.5px; font-weight:600; color:var(--green); background:#EAF3EC; padding:2px 8px; border-radius:20px; vertical-align:middle; margin-left:4px;}
+  .verif-badge{display:inline-block; font-family:'IBM Plex Mono'; font-size:10.5px; font-weight:600; color:var(--green-text); background:#EAF3EC; padding:2px 8px; border-radius:20px; vertical-align:middle; margin-left:4px;}
   [data-theme="dark"] .verif-badge{background:rgba(63,125,88,0.22);}
   .insignia-badge{display:inline-block; font-family:'IBM Plex Mono'; font-size:10.5px; font-weight:600; color:var(--orange-deep); background:rgba(232,117,44,0.14); padding:2px 8px; border-radius:20px; vertical-align:middle; margin-left:4px; white-space:nowrap;}
 
@@ -200,6 +206,12 @@
 
   /* PERFIL */
   .profile-grid{display:grid; grid-template-columns:1fr 300px; gap:28px;}
+  /* "Agendar cita" se perdía scrolleando con reseñas largas, sin forma de
+     volver a actuar sin subir — sticky lo mantiene a la vista en desktop. */
+  .perfil-sidebar{position:sticky; top:calc(66px + 16px); align-self:start; max-height:calc(100vh - 66px - 32px); overflow-y:auto;}
+  /* Mini-CTA fija: equivalente mobile del sticky de desktop, donde la
+     columna lateral deja de existir y todo es una sola columna larga. */
+  .perfil-cta-mobile{display:none;}
   .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; box-shadow:var(--shadow);}
   .profile-header{display:flex; gap:18px; align-items:center; margin-bottom:20px;}
   .profile-header .avatar{width:74px;height:74px;border-radius:16px; font-size:24px;}
@@ -207,7 +219,7 @@
   .profile-header .role{font-size:12px; color:var(--ink-soft); font-family:'IBM Plex Mono'; letter-spacing:0.04em; margin-top:3px;}
   .spec-sheet{background:var(--steps-bg); border:1px solid var(--line); border-radius:16px; padding:18px 16px; display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;}
   .spec-item{text-align:center;}
-  .spec-item .k{font-family:'IBM Plex Mono'; font-size:9px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-soft);}
+  .spec-item .k{font-family:'IBM Plex Mono'; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-soft);}
   .spec-item .v{font-family:'IBM Plex Serif',serif; font-size:19px; font-weight:700; color:var(--navy); margin-top:4px;}
   .chip-row{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px;}
   .chip{font-size:12px; font-weight:600; background:var(--paper); border:1px solid var(--line); color:var(--navy); padding:6px 11px; border-radius:20px;}
@@ -241,7 +253,7 @@
   .pass-toggle:hover{color:var(--navy);}
   .msg{font-size:12.5px; padding:10px 12px; border-radius:9px; margin-bottom:14px;}
   .msg.err{background:#F3E3E0; color:var(--red);}
-  .msg.ok{background:#EAF3EC; color:var(--green);}
+  .msg.ok{background:#EAF3EC; color:var(--green-text);}
 
   /* AGENDAR */
   .cal{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:20px; box-shadow:var(--shadow);}
@@ -278,11 +290,11 @@
   tr:last-child td{border-bottom:none;}
   .status-pill{font-size:11px; font-weight:600; padding:4px 9px; border-radius:20px; font-family:'IBM Plex Mono';}
   .status-pendiente{background:#FCEFE3; color:var(--orange-deep);}
-  .status-aceptada{background:#EAF3EC; color:var(--green);}
+  .status-aceptada{background:#EAF3EC; color:var(--green-text);}
   .status-rechazada{background:#F3E3E0; color:var(--red);}
   .status-cancelada{background:#F3E3E0; color:var(--red);}
   .status-completada{background:#E4E9F0; color:var(--navy);}
-  .status-activo{background:#EAF3EC; color:var(--green);}
+  .status-activo{background:#EAF3EC; color:var(--green-text);}
   .status-bloqueado{background:#F3E3E0; color:var(--red);}
   .status-resuelto{background:#E4E9F0; color:var(--navy);}
   .row-actions{display:flex; gap:6px; flex-wrap:wrap;}
@@ -375,6 +387,13 @@
     main{padding-top:24px;}
     .worker-grid{grid-template-columns:1fr 1fr;}
     .profile-grid{grid-template-columns:1fr;}
+    /* La columna lateral ya no está "al lado" del contenido largo, así que el
+       sticky de desktop no tiene sentido acá — en su lugar, una mini barra
+       fija abajo (ver .perfil-cta-mobile) hace su trabajo. */
+    .perfil-sidebar{position:static; max-height:none; overflow-y:visible;}
+    .perfil-cta-mobile{display:block; position:fixed; left:0; right:0; bottom:0; z-index:60; padding:10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); background:var(--card); border-top:1px solid var(--line); box-shadow:0 -8px 24px -12px rgba(0,0,0,0.25);}
+    .perfil-cta-mobile .btn{width:100%;}
+    #v-perfil{padding-bottom:70px;}
     .spec-sheet{grid-template-columns:repeat(2,1fr);}
     .admin-summary{grid-template-columns:repeat(2,1fr);}
     table{display:block; overflow-x:auto; white-space:nowrap;}
