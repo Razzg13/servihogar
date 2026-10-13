@@ -1432,6 +1432,15 @@ function toggleFiltroDisponibleAhora(){
   state.filtroDisponibleAhora = !state.filtroDisponibleAhora;
   renderBuscar();
 }
+// Solo tiene efecto visual en mobile (ver @media 560px); en desktop
+// #filtros-extra ya está siempre visible y este botón ni se muestra.
+function toggleFiltrosExtra(){
+  const box = document.getElementById('filtros-extra');
+  const btn = document.getElementById('btn-filtros-toggle');
+  if(!box || !btn) return;
+  const abierto = box.classList.toggle('open');
+  btn.setAttribute('aria-expanded', String(abierto));
+}
 async function renderBuscar(){
   const chipsBox = document.getElementById('buscar-chips');
   if(chipsBox){
@@ -1517,7 +1526,15 @@ async function renderBuscar(){
     );
   }
 
-  if(box) box.innerHTML = results.length ? results.map(w=>workerCardHTML(w,{comparador:true})).join('') : `<div class="empty-note">No encontramos trabajadores con ese criterio. Prueba con otra categoría o término.</div>`;
+  if(box) box.innerHTML = results.length ? results.map(w=>workerCardHTML(w,{comparador:true})).join('') : vacioBuscarHTML(q);
+  // Cuenta solo los filtros que viven colapsados en #filtros-extra (mobile),
+  // para que el botón "Filtros" avise cuántos hay puestos sin tener que abrirlo.
+  const badge = document.getElementById('filtros-extra-badge');
+  if(badge){
+    const nExtra = (state.filtroDisponibleAhora?1:0) + (state.zonaFiltro?1:0) + (state.radioFiltro?1:0);
+    badge.textContent = String(nExtra);
+    badge.classList.toggle('hidden', nExtra===0);
+  }
   renderComparadorBar();
   renderResumenBuscar(results, q);
   state.resultadosBuscar = results;
@@ -1550,6 +1567,36 @@ function renderResumenBuscar(results, q){
     <span>${verificados} verificados</span>
     <span>${minTarifa ? 'Desde '+fmtCOP(minTarifa) : 'Sin tarifas'}</span>
     ${filtrosHTML}`;
+}
+// A diferencia de "No encontramos trabajadores con ese criterio" (mismo texto
+// genérico sea 1 filtro o 5 encimados), esto nombra qué hay puesto y ofrece
+// sacarlo con un click — es el momento de mayor abandono del flujo de
+// búsqueda, no vale dejarlo en un callejón sin salida.
+function vacioBuscarHTML(q){
+  const secundarios = !!(state.servicioFiltro || state.zonaFiltro || state.filtroDisponibleAhora || state.radioFiltro || q);
+  const catTxt = state.catFiltro ? state.catFiltro.toLowerCase() : '';
+  let acciones = '';
+  if(secundarios) acciones += `<button type="button" class="btn btn-outline" onclick="limpiarFiltrosSecundarios()">Quitar estos filtros${state.catFiltro?` y ver todos los ${esc(catTxt)}`:''}</button>`;
+  if(state.catFiltro) acciones += `<button type="button" class="btn btn-outline" onclick="setCatFiltro('')">Ver todas las categorías</button>`;
+  if(!acciones) acciones = `<button type="button" class="btn btn-outline" onclick="limpiarFiltrosBuscar()">Limpiar filtros</button>`;
+  return `<div class="empty-note">
+    No encontramos trabajadores con estos filtros.
+    <div style="margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">${acciones}</div>
+  </div>`;
+}
+// Saca los filtros "de afinar" (especialidad, zona, disponibilidad, radio,
+// texto) pero deja la categoría puesta — para cuando el 0 vino de combinar
+// demasiados filtros, no de que la categoría en sí no tenga trabajadores.
+function limpiarFiltrosSecundarios(){
+  state.servicioFiltro = null;
+  state.zonaFiltro = null;
+  state.filtroDisponibleAhora = false;
+  state.radioFiltro = null;
+  const inputTexto = document.getElementById('buscar-text');
+  if(inputTexto) inputTexto.value = '';
+  const radio = document.getElementById('buscar-radio');
+  if(radio) radio.value = '';
+  renderBuscar();
 }
 function limpiarFiltrosBuscar(){
   state.catFiltro = null;
@@ -1596,11 +1643,19 @@ async function verComparador(){
   const panel = document.getElementById('comparador-panel');
   if(!panel || !trabajadores.length) return;
   panel.classList.remove('hidden');
+  // Comparar oficios distintos (ej. un plomero contra un jardinero) da una
+  // tabla técnicamente correcta pero sin sentido — el punto de comparar es
+  // elegir entre opciones intercambiables para el mismo trabajo.
+  const categorias = new Set(trabajadores.map(w=>w.categoria));
+  const avisoCategorias = categorias.size > 1
+    ? `<div class="msg err" style="margin-bottom:14px;">⚠️ Estás comparando oficios distintos (${[...categorias].map(c=>esc(c)).join(', ')}) — la comparación solo tiene sentido entre trabajadores del mismo oficio.</div>`
+    : '';
   panel.innerHTML = `<div class="card" style="overflow-x:auto;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <h3 style="font-size:15px;">Comparar trabajadores</h3>
       <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="limpiarComparador()">Cerrar</button>
     </div>
+    ${avisoCategorias}
     <table><thead><tr><th></th>${trabajadores.map(w=>`<th>${esc(w.nombre)}</th>`).join('')}</tr></thead><tbody>
       <tr><td>Categoría</td>${trabajadores.map(w=>`<td>${esc(w.categoria)}</td>`).join('')}</tr>
       <tr><td>Zona</td>${trabajadores.map(w=>`<td>${esc(w.zona)}</td>`).join('')}</tr>
@@ -1612,6 +1667,9 @@ async function verComparador(){
       <tr><td></td>${trabajadores.map(w=>`<td><button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="verPerfil('${w.id}')">Ver perfil</button></td>`).join('')}</tr>
     </tbody></table>
   </div>`;
+  // La barra de "Comparar" es fija abajo; en una lista larga el panel aparece
+  // debajo de todas las tarjetas y, sin este scroll, parece que no pasó nada.
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function setVistaBuscar(vista){
   state.vistaBuscar = vista;

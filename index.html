@@ -436,20 +436,27 @@
         <option value="precio-desc">Precio: mayor a menor</option>
         <option value="calificacion">Mejor calificados</option>
       </select>
-      <button type="button" class="btn btn-outline" id="btn-disponible-ahora" aria-pressed="false" onclick="toggleFiltroDisponibleAhora()"><svg width="9" height="9" viewBox="0 0 9 9" style="vertical-align:1px;margin-right:4px;flex-shrink:0;" aria-hidden="true"><circle cx="4.5" cy="4.5" r="4.5" fill="currentColor"/></svg>Disponible ahora</button>
-      <button type="button" class="btn btn-outline" id="btn-cerca-de-mi" onclick="obtenerMiUbicacion()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px;flex-shrink:0;" aria-hidden="true"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>Cerca de mí</button>
-      <label class="sr-only" for="buscar-radio">Distancia máxima</label>
-      <select id="buscar-radio" class="hidden" onchange="setRadioFiltro(this.value)">
-        <option value="">Cualquier distancia</option>
-        <option value="2">Hasta 2 km</option>
-        <option value="5">Hasta 5 km</option>
-        <option value="10">Hasta 10 km</option>
-      </select>
+      <button type="button" class="btn btn-outline filtros-toggle" id="btn-filtros-toggle" aria-expanded="false" aria-controls="filtros-extra" onclick="toggleFiltrosExtra()">Filtros <span id="filtros-extra-badge" class="filtros-badge hidden">0</span></button>
+    </div>
+    <!-- En mobile arranca colapsado (ver toggleFiltrosExtra/CSS .filtros-toggle);
+         en desktop se ve siempre, como una fila más de controles. -->
+    <div id="filtros-extra">
+      <div class="filtros-extra-row">
+        <button type="button" class="btn btn-outline" id="btn-disponible-ahora" aria-pressed="false" onclick="toggleFiltroDisponibleAhora()"><svg width="9" height="9" viewBox="0 0 9 9" style="vertical-align:1px;margin-right:4px;flex-shrink:0;" aria-hidden="true"><circle cx="4.5" cy="4.5" r="4.5" fill="currentColor"/></svg>Disponible ahora</button>
+        <button type="button" class="btn btn-outline" id="btn-cerca-de-mi" onclick="obtenerMiUbicacion()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px;flex-shrink:0;" aria-hidden="true"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>Cerca de mí</button>
+        <label class="sr-only" for="buscar-radio">Distancia máxima</label>
+        <select id="buscar-radio" class="hidden" onchange="setRadioFiltro(this.value)">
+          <option value="">Cualquier distancia</option>
+          <option value="2">Hasta 2 km</option>
+          <option value="5">Hasta 5 km</option>
+          <option value="10">Hasta 10 km</option>
+        </select>
+      </div>
+      <div class="chipbar" id="buscar-zona-chips"></div>
     </div>
     <div id="ubicacion-msg" role="status" aria-live="polite"></div>
     <div class="chipbar" id="buscar-chips"></div>
     <div class="chipbar" id="buscar-servicios-chips" style="margin-top:-14px;"></div>
-    <div class="chipbar" id="buscar-zona-chips" style="margin-top:-14px;"></div>
     <div class="results-summary" id="buscar-summary" role="status" aria-live="polite"></div>
     <div class="map-toggle" role="group" aria-label="Forma de ver los resultados">
       <button id="btn-vista-lista" class="on" aria-pressed="true" onclick="setVistaBuscar('lista')">Lista</button>

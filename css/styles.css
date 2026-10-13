@@ -148,6 +148,12 @@
   .search-bar{display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;}
   .search-bar input{flex:1; min-width:220px; padding:12px 14px; border:1.5px solid var(--line); border-radius:10px; font-size:14px; font-family:inherit; background:#fff;}
   .search-bar select{padding:12px 14px; border:1.5px solid var(--line); border-radius:10px; font-size:13px; font-family:inherit; background:#fff; color:var(--navy);}
+  /* El botón "Filtros" solo existe para colapsar disponibilidad/ubicación/zona
+     en mobile (ver @media 560px más abajo); en desktop estos controles van
+     siempre visibles, así que acá no se muestra. */
+  .filtros-toggle{display:none; align-items:center; gap:6px;}
+  .filtros-badge{background:var(--orange); color:#fff; font-family:'IBM Plex Mono'; font-size:10px; font-weight:700; min-width:16px; height:16px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; padding:0 3px;}
+  .filtros-extra-row{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;}
   .chipbar{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:22px;}
   .chipbtn{padding:8px 14px; border-radius:20px; border:1.5px solid var(--line); background:#fff; font-size:12.5px; font-weight:600; color:var(--navy); transition:background 160ms var(--ease-out), border-color 160ms var(--ease-out), color 160ms var(--ease-out), transform 120ms var(--ease-out);}
   .chipbtn:active{transform:scale(0.95);}
@@ -187,6 +193,10 @@
   .map-toggle button.on{background:var(--orange); border-color:var(--orange); color:#fff;}
   .leaflet-popup-content{font-family:'IBM Plex Sans'; font-size:12.5px;}
   .leaflet-popup-content b{font-family:'IBM Plex Serif';}
+  /* Leaflet trae su propio chrome blanco a prueba de temas — sin esto es el
+     único rincón del flujo de búsqueda donde el modo oscuro no se cumple. */
+  [data-theme="dark"] .leaflet-popup-content-wrapper, [data-theme="dark"] .leaflet-popup-tip{background:var(--card); color:var(--ink); box-shadow:var(--shadow);}
+  [data-theme="dark"] .leaflet-popup-close-button{color:var(--ink-soft) !important;}
 
   /* PERFIL */
   .profile-grid{display:grid; grid-template-columns:1fr 300px; gap:28px;}
@@ -382,6 +392,12 @@
     .admin-summary{grid-template-columns:1fr;}
     .form-card{padding:22px;}
     footer{padding-left:18px; padding-right:18px;}
+    /* Disponibilidad/cerca-de-mí/zona colapsadas detrás de "Filtros": antes
+       ocupaban toda la primera pantalla en mobile, sin ver ni una tarjeta. */
+    .filtros-toggle{display:inline-flex;}
+    #filtros-extra{display:none; margin-bottom:14px;}
+    #filtros-extra.open{display:block;}
+    .filtros-extra-row button, .filtros-extra-row select{width:100%;}
   }
 
   /* ===================== HOME ===================== */
