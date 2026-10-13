@@ -2109,7 +2109,10 @@ async function renderMisCitas(){
       const w = porId.get(c.trabajadorId);
       let accion = '';
       if(c.estado==='pendiente') accion = `<button class="btn btn-outline" onclick="cancelarCita('${c.id}', this)">Cancelar</button>`;
-      if(c.estado==='aceptada') accion = `<button class="btn btn-outline" onclick="marcarCompletada('${c.id}', this)">Marcar completado</button>`;
+      // Antes, una cita ya aceptada no se podía cancelar — solo reagendar (a
+      // otro horario, no cancelar de verdad) o el flujo pesado de "Reportar".
+      // Mismo cancelarCita() de arriba, que ya pide motivo y confirma.
+      if(c.estado==='aceptada') accion = `<button class="btn btn-outline" onclick="marcarCompletada('${c.id}', this)">Marcar completado</button> <button class="btn btn-outline cc-danger" onclick="cancelarCita('${c.id}', this)">Cancelar</button>`;
       if(c.estado==='completada' && !c.calificacion) accion = `<button class="btn btn-primary" onclick="abrirCalificar('${c.id}')">Calificar</button>`;
       if(c.calificacion) accion = `<span class="cc-tag">${'★'.repeat(c.calificacion.estrellas)} calificado</span>`;
       if(c.estado==='pendiente' || c.estado==='aceptada') accion += ` <button class="btn btn-outline" onclick="reagendarCita('${c.id}')">Reagendar</button>`;
@@ -2117,8 +2120,13 @@ async function renderMisCitas(){
       if(c.estado==='aceptada') accion += ` <button class="btn btn-outline" onclick="descargarIcs('${c.id}')">📅 Calendario</button>`;
       let pagoPill;
       if(c.pago==='pagado') pagoPill = `<span class="status-pill status-activo">pagado</span>`;
-      else if(c.pago==='declarado') pagoPill = `<span class="status-pill status-pendiente">esperando confirmación</span>`;
-      else if(c.estado==='aceptada' || c.estado==='completada') pagoPill = `<button class="btn btn-outline btn-xs" onclick="abrirDeclararPago('${c.id}')">Pagar</button>`;
+      // "declarado" y "sin pagar" usaban el mismo pill naranja (status-pendiente),
+      // diferenciados solo por el texto — de un vistazo no se distinguía "ya
+      // pagué, falta que confirmen" de "todavía debés". status-completada
+      // (navy/gris neutro) ya existe para "no es urgente, pero tampoco es
+      // deuda" — más honesto que el naranja de "tenés que actuar".
+      else if(c.pago==='declarado') pagoPill = `<span class="status-pill status-completada">esperando confirmación</span>`;
+      else if(c.estado==='aceptada' || c.estado==='completada') pagoPill = `<button class="btn btn-primary btn-xs" onclick="abrirDeclararPago('${c.id}')">Pagar</button>`;
       else pagoPill = `<span class="status-pill status-pendiente">pago pendiente</span>`;
       return `<div class="cita-card">
         <div class="cc-head">
@@ -2189,6 +2197,12 @@ async function cancelarCita(id, btn){
   });
 }
 async function marcarCompletada(id, btn){
+  // Completar habilita la calificación y, en los hechos, certifica que el
+  // servicio ocurrió — lo declara una sola parte (el cliente) sin ninguna
+  // confirmación del trabajador. Cancelar, una acción menos grave, ya pedía
+  // confirmar; esto al menos le pone el mismo freno de "esto no se deshace".
+  const ok = await confirmarModal('¿El trabajo ya se hizo? Esto habilita calificar y no se puede deshacer.', {titulo:'Marcar como completada', textoConfirmar:'Sí, ya se hizo', peligro:false});
+  if(!ok) return;
   await conCargando(btn, 'Guardando...', async () => {
     const { error } = await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
     if(error){ mostrarToast('No se pudo marcar como completada. Intenta de nuevo.', 'err'); return; }
@@ -2233,9 +2247,15 @@ async function renderDeclararPagoPanel(){
   if(!panel || !state.citaPagar) return;
   const cita = (state.citasCacheCliente||[]).find(c=>c.id===state.citaPagar);
   const w = cita ? await obtenerPerfil(cita.trabajadorId) : null;
+  // Antes esto nunca aparecía en pantalla: el cliente transfería a un
+  // desconocido sin ver la cifra en ningún momento (calcularMonto() solo se
+  // usaba del lado del servidor, al confirmar el envío). Mismo cálculo que
+  // ya usa el backend, mostrado acá como "ficha de datos" antes de pagar.
+  const monto = w ? calcularMonto(w, cita && cita.es_urgente) : null;
   panel.innerHTML = `
     <div class="card" style="max-width:440px;">
       <h3 style="font-size:15px; margin-bottom:10px;">Pagar a ${w?esc(w.nombre.split(' ')[0]):'tu trabajador'}</h3>
+      ${monto ? `<div class="spec-item" style="background:var(--steps-bg); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:14px;"><div class="k">Total a pagar</div><div class="v">${fmtCOP(monto)}</div></div>` : ''}
       <button type="button" class="btn btn-primary" style="width:100%;" id="btn-pagar-mp" onclick="pagarConMercadoPago()">💳 Pagar con tarjeta, Nequi o PSE</button>
       <div id="pagar-mp-msg" role="status" aria-live="polite" style="margin-top:8px;"></div>
       <p style="font-size:11px; color:var(--ink-soft); text-align:center; margin:16px 0;">— o pagale directo por transferencia —</p>
