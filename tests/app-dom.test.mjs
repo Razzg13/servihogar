@@ -43,7 +43,7 @@ const PERFILES = [
   },
   {
     id: 'w-jardin', tipo: 'trabajador', estado: 'activo', nombre: 'Carlos Pérez', correo: 'carlos@correo.com',
-    categoria: 'Jardinería', zona: 'Ambalá', tarifa: 35000, tarifa_urgente: null, experiencia: 8,
+    categoria: 'Jardinería', zona: 'Comuna 5 - Jordán', tarifa: 35000, tarifa_urgente: null, experiencia: 8,
     verificado: true, verificacion_pendiente: false, disponible_ahora: false, radio_cobertura_km: null,
     lat: null, lng: null, servicios: ['Poda de árboles', 'Mantenimiento de césped'],
     galeria_fotos: ['img/icon-192.png'], foto_url: null, datos_pago_texto: 'Nequi 300 999 8877',
@@ -302,7 +302,7 @@ comprobar('El perfil del trabajador carga sus datos', /Carlos/.test(perfilNombre
 comprobar('El perfil muestra la insignia de identidad verificada', /Identidad/.test(q(`document.querySelector('#perfil-content').innerHTML`)));
 comprobar('El perfil muestra la galería de trabajos', q(`document.querySelectorAll('#perfil-content .galeria-item').length`) >= 1);
 comprobar('El perfil lista las reseñas con su respuesta', q(`document.querySelectorAll('#perfil-content .review').length`) === 2);
-comprobar('El perfil tiene mapa e indicador de zona', /Ambalá/.test(q(`document.querySelector('#perfil-content .map-caption').textContent`)));
+comprobar('El perfil tiene mapa e indicador de zona', /Jordán/.test(q(`document.querySelector('#perfil-content .map-caption').textContent`)));
 
 evalCtx(`irAAgendar('w-jardin')`);
 await esperar(300);

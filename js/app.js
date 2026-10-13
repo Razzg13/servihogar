@@ -2210,9 +2210,17 @@ async function marcarCompletada(id, btn){
   // confirmar; esto al menos le pone el mismo freno de "esto no se deshace".
   const ok = await confirmarModal('¿El trabajo ya se hizo? Esto habilita calificar y no se puede deshacer.', {titulo:'Marcar como completada', textoConfirmar:'Sí, ya se hizo', peligro:false});
   if(!ok) return;
+  // A diferencia de cancelar o declarar un pago, esto no avisaba al
+  // trabajador — se enteraba recién si entraba a revisar sus citas. No se
+  // agrega una confirmación de su parte (eso cambiaría el flujo de estados
+  // y el trigger de pago, una decisión de producto aparte); como mínimo que
+  // se entere, y que sepa que puede reclamar por PQR si no está de acuerdo.
+  const cita = (state.citasCacheCliente||[]).find(c=>c.id===id);
   await conCargando(btn, 'Guardando...', async () => {
     const { error } = await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
     if(error){ mostrarToast('No se pudo marcar como completada. Intenta de nuevo.', 'err'); return; }
+    if(cita && cita.trabajadorId) addNotificacion(cita.trabajadorId, `El cliente marcó como completada la cita del ${cita.fecha}. Si no estás de acuerdo, podés reclamar desde Ayuda → PQR.`);
+    mostrarToast('Cita marcada como completada.', 'ok');
     renderMisCitas();
   });
 }
