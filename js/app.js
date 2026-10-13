@@ -3539,6 +3539,13 @@ async function responderPQR(id, btn){
 
 async function renderEstadisticas(){
   const box = document.getElementById('admin-estadisticas');
+  // A diferencia de renderAdmin() y renderPQRAdmin(), esta función no
+  // chequeaba sesión de admin — cualquiera sin loguearse podía entrar a
+  // #/admin, tocar la pestaña Estadísticas, y ver datos reales de la
+  // plataforma (calificaciones, altas de trabajadores por mes). Confirmado
+  // en vivo durante la crítica de diseño de esta sesión.
+  const u = currentUser();
+  if(!u || u.tipo!=='admin'){ box.innerHTML = `<div class="empty-note">Solo el administrador puede ver este panel.</div>`; return; }
   box.innerHTML = `<div class="empty-note">Cargando...</div>`;
   const [trabajadores, { data: todasCitas }] = await Promise.all([
     cargarTrabajadores(),
