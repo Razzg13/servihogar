@@ -437,10 +437,17 @@ function tileLayer(map){
     maxZoom: 18, attribution: '© OpenStreetMap'
   }).addTo(map);
 }
-function pinIcon(color){
+// categoria es opcional: cuando se pasa, dibuja el mismo ícono de oficio que
+// ya usan las categorías de la home/buscar adentro del pin — antes todos los
+// pines eran el mismo teardrop liso, sin forma de distinguir oficios en el
+// mapa de un vistazo. Se contrarrota +45deg para que el ícono quede derecho
+// pese a que el teardrop exterior está rotado -45deg.
+function pinIcon(color, categoria){
+  const path = categoria && ICONS[categoria];
+  const glyph = path ? `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;transform:rotate(45deg);">${path}</svg>` : '';
   return L.divIcon({
-    className:'', html:`<div style="width:16px;height:16px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);"></div>`,
-    iconSize:[16,16], iconAnchor:[8,16]
+    className:'', html:`<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">${glyph}</div>`,
+    iconSize:[22,22], iconAnchor:[11,22]
   });
 }
 
@@ -1732,7 +1739,7 @@ function initMapaBuscar(results){
 
   results.forEach(w=>{
     const coords = coordsForWorker(w);
-    L.marker(coords, {icon:pinIcon('#1C2B39')}).addTo(mapBuscar)
+    L.marker(coords, {icon:pinIcon('#BD5818', w.categoria)}).addTo(mapBuscar)
       .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}<br><a href="#" onclick="verPerfil('${w.id}'); return false;">Ver perfil →</a>`);
   });
   if(state.miUbicacion){
@@ -1829,7 +1836,7 @@ function initMapaPerfil(w){
   if(mapPerfil){ mapPerfil.remove(); mapPerfil = null; }
   mapPerfil = L.map('perfil-mapa', {zoomControl:false, attributionControl:false}).setView(coords, 13);
   tileLayer(mapPerfil);
-  L.marker(coords, {icon:pinIcon('#E8752C')}).addTo(mapPerfil)
+  L.marker(coords, {icon:pinIcon('#BD5818', w.categoria)}).addTo(mapPerfil)
     .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}`);
   if(w.radio_cobertura_km){
     const circulo = L.circle(coords, {
