@@ -257,7 +257,7 @@ const MSG_ARCHIVO_GRANDE = `El archivo pesa más de ${MAX_ARCHIVO_MB}MB. Elegí 
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, servicioFiltro:null, zonaFiltro:null, workerActual:null, workerPerfil:null, workerPerfilError:false, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[], regUbicacion:null, filtroSolicitudes:'abiertas', pendingAgendarWorkerId:null };
+let state = { catFiltro:null, servicioFiltro:null, zonaFiltro:null, workerActual:null, workerPerfil:null, workerPerfilError:false, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[], regUbicacion:null, filtroSolicitudes:'abiertas', pendingAgendarWorkerId:null, filtroAdminUsuarios:'pendientes' };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -3338,6 +3338,18 @@ async function renderAdmin(){
     [c.clienteId, c.trabajadorId].forEach(id=>{ if(id) reportesPorUsuario.set(id, (reportesPorUsuario.get(id)||0) + 1); });
   });
 
+  // Sin esto, encontrar las pocas filas que necesitan una decisión hoy
+  // significaba escanear toda la tabla de usuarios a mano. "Pendientes"
+  // (de verificación de identidad o antecedentes) queda primero por defecto.
+  const filtroAdmin = state.filtroAdminUsuarios || 'pendientes';
+  const esPendiente = x => x.tipo==='trabajador' && ((x.verificacionPendiente && !x.verificado) || (x.antecedentes_pendiente && !x.antecedentes_verificado));
+  const visiblesAdmin = filtroAdmin==='todos' ? others
+    : filtroAdmin==='bloqueados' ? others.filter(x=>x.estado==='bloqueado')
+    : others.filter(esPendiente);
+  const nPendientesFiltro = others.filter(esPendiente).length;
+  const nBloqueados = others.filter(x=>x.estado==='bloqueado').length;
+  const chipAdmin = (valor, label, n) => `<button type="button" class="chipbtn sm ${filtroAdmin===valor?'on':''}" aria-pressed="${filtroAdmin===valor}" onclick="state.filtroAdminUsuarios='${valor}'; renderAdmin();">${label} (${n})</button>`;
+
   document.getElementById('admin-usuarios').innerHTML = `
     <div class="admin-summary">
       <div class="admin-stat"><span>Usuarios</span><b>${others.length}</b><small>${trabajadores.length} trabajadores</small></div>
@@ -3345,18 +3357,22 @@ async function renderAdmin(){
       <div class="admin-stat"><span>Citas</span><b>${(todasCitas||[]).length}</b><small>${citasPendientes} por responder</small></div>
       <div class="admin-stat"><span>Reportes</span><b>${reportesAbiertos}</b><small>Abiertos</small></div>
     </div>
+    <div class="chipbar">${chipAdmin('pendientes','Pendientes',nPendientesFiltro)}${chipAdmin('bloqueados','Bloqueados',nBloqueados)}${chipAdmin('todos','Todos',others.length)}</div>
+    <p style="font-size:11.5px; color:var(--ink-soft); margin:-10px 0 14px;">La columna "Historial" cuenta citas con reporte donde la persona participó — no distingue de qué lado es la falta.</p>
     <table><thead><tr><th>Nombre</th><th>Tipo</th><th>Correo</th><th>Estado</th><th>Verificación</th><th>Antecedentes</th><th>Historial</th><th>Acción</th></tr></thead><tbody>
-    ${others.map(x=>{
+    ${visiblesAdmin.length ? visiblesAdmin.map(x=>{
       let verifCell = '—';
       let antecedentesCell = '—';
       if(x.tipo==='trabajador'){
         const verDoc = x.verificacionPendiente && x.verificacion_doc_path
           ? `<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verDocumentoVerificacion('${esc(x.verificacion_doc_path)}')">Ver documento</button>` : '';
+        // <details> en vez de title: un tooltip de solo-hover no lo anuncia
+        // un lector de pantalla ni se puede abrir con el dedo en mobile —
+        // esto es tocable/enfocable y queda cerrado por defecto.
         const historial = x.verificacion_historial || [];
-        const historialTitle = historial.length
-          ? historial.map(h=>`${h.fecha ? new Date(h.fecha).toLocaleDateString() : '?'}: ${h.accion}${h.motivo ? ' — '+h.motivo : ''}`).join(' | ')
-          : '';
-        const historialIcono = historialTitle ? ` <span title="${esc(historialTitle)}" style="cursor:help;">🕘</span>` : '';
+        const historialIcono = historial.length ? ` <details style="display:inline-block;"><summary style="cursor:pointer;display:inline;">🕘</summary>
+          <ul style="margin:4px 0 0; padding-left:16px; font-size:11px; color:var(--ink-soft);">${historial.map(h=>`<li>${esc(h.fecha ? new Date(h.fecha).toLocaleDateString() : '?')}: ${esc(h.accion)}${h.motivo ? ' — '+esc(h.motivo) : ''}</li>`).join('')}</ul>
+        </details>` : '';
         verifCell = x.verificado ? `<span class="verif-badge">✓ Verificado</span>${historialIcono}`
           : x.verificacionPendiente ? `${verDoc}<button class="btn btn-outline" style="font-size:12px;padding:6px 10px;margin-right:6px;" onclick="verificarTrabajador('${x.id}', this)">Verificar</button><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="rechazarVerificacion('${x.id}', this)">Rechazar</button>${historialIcono}`
           : x.verificacion_rechazada ? `<span class="status-pill status-rechazada" title="${esc(x.verificacion_motivo_rechazo||'')}">Rechazada</span>${historialIcono}`
@@ -3372,14 +3388,14 @@ async function renderAdmin(){
       const nCancel = cancelacionesPorUsuario.get(x.id) || 0;
       const nRep = reportesPorUsuario.get(x.id) || 0;
       const llamaAtencion = nCancel >= 3 || nRep >= 2;
-      const historialCell = `<span${llamaAtencion ? ' class="status-pill status-rechazada"' : ''} title="Reportes: cuenta citas con reporte donde participó, no distingue de qué lado es la falta.">${nCancel} canceladas · ${nRep} reportes</span>`;
+      const historialCell = `<span${llamaAtencion ? ' class="status-pill status-rechazada"' : ''}>${nCancel} canceladas · ${nRep} reportes</span>`;
       return `<tr><td>${esc(x.nombre)}</td><td>${x.tipo}</td><td>${esc(x.correo)}</td>
       <td><span class="status-pill status-${x.estado}">${x.estado}</span></td>
       <td>${verifCell}</td>
       <td>${antecedentesCell}</td>
       <td>${historialCell}</td>
       <td><button class="btn btn-outline" style="font-size:12px;padding:6px 10px;" onclick="toggleEstadoUsuario('${x.id}', this)">${x.estado==='activo'?'Bloquear':'Activar'}</button></td></tr>`;
-    }).join('')}
+    }).join('') : `<tr><td colspan="8"><div class="empty-note">${filtroAdmin==='pendientes'?'No hay verificaciones pendientes ahora mismo.':'No hay usuarios en este filtro.'}</div></td></tr>`}
     </tbody></table>`;
 
   const trabajadoresDeReportes = await obtenerPerfiles(citasDeReportes.filter(Boolean).map(c=>c.trabajadorId));
@@ -3398,8 +3414,15 @@ async function renderAdmin(){
 async function toggleEstadoUsuario(id, btn){
   const u = await obtenerPerfil(id);
   if(!u) return;
+  const nuevoEstado = u.estado==='activo' ? 'bloqueado' : 'activo';
+  // Bloquear corta el ingreso real de un trabajador (o el acceso de un
+  // cliente), y corría con un solo click sin confirmar nada — menos fricción
+  // que rechazar un documento, pese a ser al menos igual de grave.
+  if(nuevoEstado==='bloqueado'){
+    const ok = await confirmarModal(`¿Seguro que querés bloquear a ${u.nombre.split(' ')[0]}? No va a poder usar la plataforma hasta que lo reactives.`, {titulo:'Bloquear usuario', textoConfirmar:'Sí, bloquear'});
+    if(!ok) return;
+  }
   await conCargando(btn, 'Guardando...', async () => {
-    const nuevoEstado = u.estado==='activo' ? 'bloqueado' : 'activo';
     const { error } = await sb.from('profiles').update({ estado: nuevoEstado }).eq('id', id);
     if(error){ mostrarToast('No se pudo actualizar el estado del usuario.', 'err'); return; }
     invalidarPerfil(id);
@@ -3416,6 +3439,12 @@ async function verDocumentoVerificacion(path){
 async function verificarTrabajador(id, btn){
   const u = await obtenerPerfil(id);
   if(!u) return;
+  // "Verificar" y "Rechazar" quedan a pocos píxeles en la misma celda de la
+  // tabla; rechazar ya pedía un motivo por escrito, pero verificar —otorgar
+  // el distintivo ✓ que ven todos los futuros clientes— corría al toque, sin
+  // ninguna forma de deshacerlo desde acá si fue un click de más.
+  const ok = await confirmarModal(`¿Confirmás que el documento de ${u.nombre.split(' ')[0]} es válido? Va a mostrar el distintivo ✓ Verificado.`, {titulo:'Verificar identidad', textoConfirmar:'Sí, verificar', peligro:false});
+  if(!ok) return;
   await conCargando(btn, 'Verificando...', async () => {
     const historial = [...(u.verificacion_historial || []), { fecha: new Date().toISOString(), accion: 'aprobada' }];
     const { error } = await sb.from('profiles').update({
@@ -3457,6 +3486,8 @@ async function rechazarVerificacion(id, btn){
 async function verificarAntecedentes(id, btn){
   const u = await obtenerPerfil(id);
   if(!u) return;
+  const ok = await confirmarModal(`¿Confirmás que el certificado de antecedentes de ${u.nombre.split(' ')[0]} es válido? Va a mostrar el distintivo 🛡️ Antecedentes verificados.`, {titulo:'Verificar antecedentes', textoConfirmar:'Sí, verificar', peligro:false});
+  if(!ok) return;
   await conCargando(btn, 'Verificando...', async () => {
     const historial = [...(u.antecedentes_historial || []), { fecha: new Date().toISOString(), accion: 'aprobada' }];
     const { error } = await sb.from('profiles').update({
