@@ -295,6 +295,7 @@
   .status-cancelada{background:#F3E3E0; color:var(--red);}
   .status-completada{background:#E4E9F0; color:var(--navy);}
   .status-activo{background:#EAF3EC; color:var(--green-text);}
+  .status-esperando_confirmacion{background:#FCEFE3; color:var(--orange-deep);}
   .status-bloqueado{background:#F3E3E0; color:var(--red);}
   .status-resuelto{background:#E4E9F0; color:var(--navy);}
   .row-actions{display:flex; gap:6px; flex-wrap:wrap;}

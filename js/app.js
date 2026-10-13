@@ -529,6 +529,12 @@ function normalizarCita(c){
   if(!c) return null;
   return { ...c, clienteId: c.cliente_id, trabajadorId: c.trabajador_id };
 }
+// La mayoría de los valores de citas.estado ya son palabras legibles en
+// español ("pendiente", "aceptada"...); solo "esperando_confirmacion" (con
+// guion bajo, nombre de columna) necesita una etiqueta aparte para mostrar.
+function etiquetaEstadoCita(estado){
+  return estado==='esperando_confirmacion' ? 'esperando confirmación' : estado;
+}
 // Fondos suaves (tinte claro + iniciales en un tono más oscuro de la misma familia)
 const AVATAR_PALETTE = [
   ['#EFE3D3','#B85F1E'], ['#E4EDE6','#3F7D58'], ['#E1E7EE','#3A4F60'],
@@ -2120,6 +2126,7 @@ async function renderMisCitas(){
       // otro horario, no cancelar de verdad) o el flujo pesado de "Reportar".
       // Mismo cancelarCita() de arriba, que ya pide motivo y confirma.
       if(c.estado==='aceptada') accion = `<button class="btn btn-outline" onclick="marcarCompletada('${c.id}', this)">Marcar completado</button> <button class="btn btn-outline cc-danger" onclick="cancelarCita('${c.id}', this)">Cancelar</button>`;
+      if(c.estado==='esperando_confirmacion') accion = `<span class="cc-tag">Esperando que el trabajador lo confirme…</span>`;
       if(c.estado==='completada' && !c.calificacion) accion = `<button class="btn btn-primary" onclick="abrirCalificar('${c.id}')">Calificar</button>`;
       if(c.calificacion) accion = `<span class="cc-tag">${'★'.repeat(c.calificacion.estrellas)} calificado</span>`;
       if(c.estado==='pendiente' || c.estado==='aceptada') accion += ` <button class="btn btn-outline" onclick="reagendarCita('${c.id}')">Reagendar</button>`;
@@ -2133,7 +2140,7 @@ async function renderMisCitas(){
       // (navy/gris neutro) ya existe para "no es urgente, pero tampoco es
       // deuda" — más honesto que el naranja de "tenés que actuar".
       else if(c.pago==='declarado') pagoPill = `<span class="status-pill status-completada">esperando confirmación</span>`;
-      else if(c.estado==='aceptada' || c.estado==='completada') pagoPill = `<button class="btn btn-primary btn-xs" onclick="abrirDeclararPago('${c.id}')">Pagar</button>`;
+      else if(c.estado==='aceptada' || c.estado==='esperando_confirmacion' || c.estado==='completada') pagoPill = `<button class="btn btn-primary btn-xs" onclick="abrirDeclararPago('${c.id}')">Pagar</button>`;
       else pagoPill = `<span class="status-pill status-pendiente">pago pendiente</span>`;
       return `<div class="cita-card">
         <div class="cc-head">
@@ -2142,7 +2149,7 @@ async function renderMisCitas(){
             <div class="cc-name">${w?esc(w.nombre):'Trabajador'}${c.recurrente?' <span title="Servicio recurrente">🔁</span>':''}</div>
             <div class="cc-when"><span>📅 ${esc(c.fecha)}</span><span>🕑 ${esc(c.hora)}</span></div>
           </div>
-          <span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${c.estado}</span>
+          <span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${etiquetaEstadoCita(c.estado)}</span>
         </div>
         <div class="cc-pills">
           ${pagoPill}
@@ -2204,24 +2211,50 @@ async function cancelarCita(id, btn){
   });
 }
 async function marcarCompletada(id, btn){
-  // Completar habilita la calificación y, en los hechos, certifica que el
-  // servicio ocurrió — lo declara una sola parte (el cliente) sin ninguna
-  // confirmación del trabajador. Cancelar, una acción menos grave, ya pedía
-  // confirmar; esto al menos le pone el mismo freno de "esto no se deshace".
-  const ok = await confirmarModal('¿El trabajo ya se hizo? Esto habilita calificar y no se puede deshacer.', {titulo:'Marcar como completada', textoConfirmar:'Sí, ya se hizo', peligro:false});
+  // Antes esto certificaba, de un solo lado, que el servicio ocurrió — lo
+  // declaraba el cliente y habilitaba la calificación sin que el trabajador
+  // dijera nada (hallazgo P1 de la revisión de diseño de mis-citas). Ahora
+  // queda "esperando_confirmacion" hasta que el trabajador confirme u
+  // objete (o se auto-confirme a los 3 días — ver migración 030).
+  const ok = await confirmarModal('¿El trabajo ya se hizo? Se le va a pedir al trabajador que lo confirme antes de habilitar la calificación.', {titulo:'Marcar como completada', textoConfirmar:'Sí, ya se hizo', peligro:false});
   if(!ok) return;
-  // A diferencia de cancelar o declarar un pago, esto no avisaba al
-  // trabajador — se enteraba recién si entraba a revisar sus citas. No se
-  // agrega una confirmación de su parte (eso cambiaría el flujo de estados
-  // y el trigger de pago, una decisión de producto aparte); como mínimo que
-  // se entere, y que sepa que puede reclamar por PQR si no está de acuerdo.
   const cita = (state.citasCacheCliente||[]).find(c=>c.id===id);
   await conCargando(btn, 'Guardando...', async () => {
-    const { error } = await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
+    const { error } = await sb.from('citas').update({ estado: 'esperando_confirmacion' }).eq('id', id);
     if(error){ mostrarToast('No se pudo marcar como completada. Intenta de nuevo.', 'err'); return; }
-    if(cita && cita.trabajadorId) addNotificacion(cita.trabajadorId, `El cliente marcó como completada la cita del ${cita.fecha}. Si no estás de acuerdo, podés reclamar desde Ayuda → PQR.`);
-    mostrarToast('Cita marcada como completada.', 'ok');
+    if(cita && cita.trabajadorId) addNotificacion(cita.trabajadorId, `El cliente marcó como hecha la cita del ${cita.fecha}. Confirmala desde tu panel (o decinos si no fue así) — si no respondés en 3 días, se confirma sola.`);
+    mostrarToast('Avisado. Esperando que el trabajador confirme.', 'ok');
     renderMisCitas();
+  });
+}
+async function confirmarCompletadaTrabajador(id, btn){
+  const cita = (state.citasCacheTrabajador||[]).find(c=>c.id===id);
+  await conCargando(btn, 'Confirmando...', async () => {
+    const { error } = await sb.from('citas').update({ estado: 'completada' }).eq('id', id);
+    if(error){ mostrarToast('No se pudo confirmar. Intenta de nuevo.', 'err'); return; }
+    if(cita && cita.clienteId) addNotificacion(cita.clienteId, `El trabajador confirmó que el servicio del ${cita.fecha} se hizo. Ya podés calificarlo.`);
+    mostrarToast('Cita confirmada como completada.', 'ok');
+    renderTrabajo();
+  });
+}
+// Objetar reabre la cita (vuelve a "aceptada", no la deja en limbo) y crea
+// un reporte para que el admin lo revise — mismo canal que ya usaba el
+// cliente (abrirReportar/enviarReporte), extendido por RLS en la migración
+// 030 para que el trabajador también pueda crear y ver sus propios reportes.
+async function objetarCompletadaTrabajador(id, btn){
+  const motivo = await pedirTextoModal('¿Por qué no estás de acuerdo? Esto lo va a revisar un administrador.', {titulo:'El servicio no se hizo así', textoConfirmar:'Enviar', placeholder:'Contanos qué pasó'});
+  if(motivo === null) return;
+  if(!motivo.trim()){ mostrarToast('Escribí qué pasó.', 'err'); return; }
+  const cita = (state.citasCacheTrabajador||[]).find(c=>c.id===id);
+  await conCargando(btn, 'Enviando...', async () => {
+    const u = currentUser();
+    const { error: repError } = await sb.from('reportes').insert({ cita_id: id, de_nombre: u.nombre, motivo: motivo.trim(), estado: 'abierto' });
+    if(repError){ mostrarToast('No se pudo enviar la objeción: ' + repError.message, 'err'); return; }
+    const { error } = await sb.from('citas').update({ estado: 'aceptada' }).eq('id', id);
+    if(error){ mostrarToast('El reporte se envió, pero no se pudo reabrir la cita. Avisale a soporte.', 'err'); return; }
+    if(cita && cita.clienteId) addNotificacion(cita.clienteId, `El trabajador no está de acuerdo en que la cita del ${cita.fecha} esté completada. Un administrador lo va a revisar.`);
+    mostrarToast('Objeción enviada. Un administrador lo va a revisar.', 'ok');
+    renderTrabajo();
   });
 }
 // Pago manual por transferencia: el cliente declara que pagó por fuera de la
@@ -2790,7 +2823,7 @@ async function renderTrabajo(){
   // crece — a los pocos meses hay que scrollear trabajos ya cerrados para
   // encontrar lo que necesita una decisión hoy. "Abiertas" (pendiente +
   // aceptada) queda por defecto; el historial es opt-in, no el ruido de base.
-  const ABIERTOS = new Set(['pendiente','aceptada']);
+  const ABIERTOS = new Set(['pendiente','aceptada','esperando_confirmacion']);
   const filtro = state.filtroSolicitudes || 'abiertas';
   const visibles = filtro==='todas' ? propias
     : filtro==='historial' ? propias.filter(c=>!ABIERTOS.has(c.estado))
@@ -2811,6 +2844,7 @@ async function renderTrabajo(){
       let accion = '';
       if(c.estado==='pendiente') accion = `<button class="btn btn-primary" onclick="responderCita('${c.id}','aceptada', this)">Aceptar</button><button class="btn btn-outline cc-danger" onclick="responderCita('${c.id}','rechazada', this)">Rechazar</button>`;
       if(c.estado==='aceptada') accion = `<button class="btn btn-outline cc-danger" onclick="cancelarCitaTrabajador('${c.id}', this)">Cancelar</button> <button class="btn btn-outline" onclick="descargarIcs('${c.id}')">📅 Calendario</button>${!c.en_camino ? ` <button class="btn btn-outline" onclick="avisarEnCamino('${c.id}', this)">🚗 Voy en camino</button>` : ''}`;
+      if(c.estado==='esperando_confirmacion') accion = `<button class="btn btn-primary" onclick="confirmarCompletadaTrabajador('${c.id}', this)">Confirmar que se hizo</button> <button class="btn btn-outline cc-danger" onclick="objetarCompletadaTrabajador('${c.id}', this)">No fue así</button>`;
       if(c.estado==='completada' && !c.calificacion_trabajador) accion = `<button class="btn btn-outline" onclick="abrirCalificarCliente('${c.id}')">Calificar cliente</button>`;
       if(c.calificacion_trabajador) accion = `<span class="cc-tag">${'★'.repeat(c.calificacion_trabajador.estrellas)} calificado</span>`;
       let pagoCell;
@@ -2826,7 +2860,7 @@ async function renderTrabajo(){
             <div class="cc-name">${cli?esc(cli.nombre):'Cliente'}${estrellaCli}</div>
             <div class="cc-when"><span>📅 ${esc(c.fecha)}</span><span>🕑 ${esc(c.hora)}</span>${notaTxt?`<span title="${esc(notaTxt)}">📝 con notas</span>`:''}</div>
           </div>
-          <span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${c.estado}</span>
+          <span class="status-pill status-${c.estado}"${c.estado==='cancelada' && c.motivo_cancelacion ? ` title="${esc(c.motivo_cancelacion)}"` : ''}>${etiquetaEstadoCita(c.estado)}</span>
         </div>
         <div class="cc-pills">${pagoCell}${c.en_camino?' <span class="rating-pill disp-ahora">🚗 En camino</span>':''}</div>
         <div class="cc-actions">${accion}<button class="btn btn-outline" onclick="abrirChat('${c.id}')">💬 Chat</button></div>
