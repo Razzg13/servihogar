@@ -322,6 +322,10 @@
   .btn-xs{font-size:11px !important; padding:5px 9px !important;}
 
   .admin-summary{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px;}
+  /* Clase en vez de style inline: un inline le gana siempre al @media de
+     abajo, así que las 6 fichas de Estadísticas quedaban apretadas en 2
+     columnas incluso en mobile, en vez de la 1 columna ya prevista. */
+  .admin-summary--2col{grid-template-columns:repeat(2,1fr); max-width:620px;}
   .admin-stat{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:var(--shadow);}
   .admin-stat span{display:block; color:var(--ink-soft); font-family:'IBM Plex Mono'; font-size:10px; letter-spacing:0.06em; text-transform:uppercase;}
   .admin-stat b{display:block; color:var(--navy); font-family:'IBM Plex Serif'; font-weight:700; font-size:30px; line-height:1; margin:10px 0 5px; letter-spacing:-0.02em;}
@@ -331,8 +335,11 @@
   .stars-input span{color:#D8DCDB;}
   .stars-input span.on{color:var(--orange);}
 
-  .tabbar{display:flex; gap:6px; margin-bottom:22px; border-bottom:1.5px solid var(--line);}
-  .tabbar button{padding:10px 4px; margin-right:20px; border:none; background:none; font-weight:600; font-size:13.5px; color:var(--ink-soft); border-bottom:2.5px solid transparent;}
+  /* Sin overflow-x, 5 pestañas (panel trabajador) no entran en mobile y en
+     vez de recortarse hacen scrollear la página ENTERA de costado, hasta el
+     footer — mismo tratamiento de scroll horizontal que .svc-row. */
+  .tabbar{display:flex; gap:6px; margin-bottom:22px; border-bottom:1.5px solid var(--line); overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .tabbar button{padding:10px 4px; margin-right:20px; border:none; background:none; font-weight:600; font-size:13.5px; color:var(--ink-soft); border-bottom:2.5px solid transparent; white-space:nowrap; flex-shrink:0;}
   .tabbar button.on{color:var(--navy); border-color:var(--orange);}
 
   /* CHAT */

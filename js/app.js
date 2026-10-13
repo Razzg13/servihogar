@@ -257,7 +257,7 @@ const MSG_ARCHIVO_GRANDE = `El archivo pesa más de ${MAX_ARCHIVO_MB}MB. Elegí 
 
 let sessionUserId = null; // id (uuid) del usuario autenticado en Supabase Auth
 let currentProfile = null; // fila de la tabla profiles correspondiente a sessionUserId
-let state = { catFiltro:null, servicioFiltro:null, zonaFiltro:null, workerActual:null, workerPerfil:null, workerPerfilError:false, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[], regUbicacion:null };
+let state = { catFiltro:null, servicioFiltro:null, zonaFiltro:null, workerActual:null, workerPerfil:null, workerPerfilError:false, diaSel:null, horaSel:null, calMonthOffset:0, vistaBuscar:'lista', resultadosBuscar:[], mobileNavOpen:false, miUbicacion:null, radioFiltro:null, citaReagendar:null, filtroDisponibleAhora:false, estrellasSelCliente:5, conversacionActual:null, chatCitaId:null, compararIds:[], regUbicacion:null, filtroSolicitudes:'abiertas', pendingAgendarWorkerId:null };
 
 const ICONS = {
   'Plomería': '<path d="M8 3v4M16 3v4M4 9h16v3a4 4 0 0 1-4 4h-1v5H9v-5H8a4 4 0 0 1-4-4V9z"/>',
@@ -2370,7 +2370,7 @@ async function renderIngresos(){
   const clientesRecurrentes = [...completadasPorCliente.values()].filter(n=>n>1).length;
 
   box.innerHTML = `
-    <div class="admin-summary" style="grid-template-columns:repeat(2,1fr); max-width:620px;">
+    <div class="admin-summary admin-summary--2col">
       <div class="admin-stat"><span>Total cobrado</span><b>${fmtCOP(total)}</b></div>
       <div class="admin-stat"><span>Servicios pagados</span><b>${pagos.length}</b></div>
       <div class="admin-stat"><span>Citas completadas</span><b>${completadas.length}</b></div>
@@ -2719,6 +2719,16 @@ function switchWorkTab(tab){
   if(tab==='cotizar') renderCotizarTrabajador();
   if(tab==='ingresos') renderIngresos();
   if(tab==='mensajes') renderMensajesTrabajador();
+  // A diferencia de las otras 4 pestañas, "Mi perfil profesional" solo se
+  // llena una vez, dentro de renderTrabajo() al cargar la página — si la
+  // sesión expira mientras el trabajador ya está acá, este tab se queda en
+  // blanco para siempre en vez de avisar nada.
+  if(tab==='perfil'){
+    const u = currentUser();
+    if(!u || u.tipo!=='trabajador'){
+      document.getElementById('work-perfil').innerHTML = `<div class="empty-note">Inicia sesión como trabajador para ver tu perfil.</div>`;
+    }
+  }
 }
 async function renderTrabajo(){
   const u = currentUser();
@@ -2741,10 +2751,24 @@ async function renderTrabajo(){
       misCalifClientes.set(c.clienteId, acc);
     }
   });
+  // Sin esto, pendientes/activas/historial comparten una sola lista que solo
+  // crece — a los pocos meses hay que scrollear trabajos ya cerrados para
+  // encontrar lo que necesita una decisión hoy. "Abiertas" (pendiente +
+  // aceptada) queda por defecto; el historial es opt-in, no el ruido de base.
+  const ABIERTOS = new Set(['pendiente','aceptada']);
+  const filtro = state.filtroSolicitudes || 'abiertas';
+  const visibles = filtro==='todas' ? propias
+    : filtro==='historial' ? propias.filter(c=>!ABIERTOS.has(c.estado))
+    : propias.filter(c=>ABIERTOS.has(c.estado));
+  const nAbiertas = propias.filter(c=>ABIERTOS.has(c.estado)).length;
+  const nHistorial = propias.length - nAbiertas;
+  const chipFiltro = (valor, label, n) => `<button type="button" class="chipbtn sm ${filtro===valor?'on':''}" aria-pressed="${filtro===valor}" onclick="state.filtroSolicitudes='${valor}'; renderTrabajo();">${label} (${n})</button>`;
+
   document.getElementById('work-solicitudes').innerHTML = propias.length ? `
+    <div class="chipbar">${chipFiltro('abiertas','Abiertas',nAbiertas)}${chipFiltro('historial','Historial',nHistorial)}${chipFiltro('todas','Todas',propias.length)}</div>
     <div class="cita-toolbar"><button type="button" class="btn btn-outline" onclick="exportarCitasCSV('trabajador')">⬇ Exportar historial (CSV)</button></div>
     <div class="cita-list">
-    ${propias.map(c=>{
+    ${visibles.length ? visibles.map(c=>{
       const cli = clientePorId.get(c.clienteId);
       const califCli = misCalifClientes.get(c.clienteId);
       const estrellaCli = califCli ? ` <span class="cc-tag" title="Tu calificación a este cliente">★${(califCli.suma/califCli.n).toFixed(1)}</span>` : '';
@@ -2772,7 +2796,7 @@ async function renderTrabajo(){
         <div class="cc-pills">${pagoCell}${c.en_camino?' <span class="rating-pill disp-ahora">🚗 En camino</span>':''}</div>
         <div class="cc-actions">${accion}<button class="btn btn-outline" onclick="abrirChat('${c.id}')">💬 Chat</button></div>
       </div>`;
-    }).join('')}
+    }).join('') : `<div class="empty-note">${filtro==='historial' ? 'Todavía no tenés citas cerradas.' : 'No tenés solicitudes abiertas ahora mismo.'}</div>`}
     </div>
     <div id="calificar-cliente-panel" style="margin-top:20px;"></div>
     <div id="chat-panel-work" style="margin-top:20px;"></div>` : `<div class="empty-note">Todavía no tenés solicitudes de servicio.</div>`;
@@ -3148,6 +3172,14 @@ async function eliminarResena(resenaId, workerId, btn){
   });
 }
 async function responderCita(id, estado, btn){
+  // Rechazar es, en la práctica, más grave que cancelar una cita ya aceptada
+  // (el cliente nunca llegó a saber que contaba con vos) — pero era la única
+  // de las dos que no pedía confirmación. Un toque de más en una tarjeta con
+  // varios botones juntos rechazaba un trabajo real sin vuelta atrás.
+  if(estado==='rechazada'){
+    const ok = await confirmarModal('¿Seguro que querés rechazar esta solicitud? El cliente va a ser notificado.', {titulo:'Rechazar solicitud', textoConfirmar:'Sí, rechazar'});
+    if(!ok) return;
+  }
   await conCargando(btn, estado==='aceptada' ? 'Aceptando...' : 'Rechazando...', async () => {
     const { data: citaRaw, error } = await sb.from('citas').update({ estado }).eq('id', id).select().single();
     if(error){ mostrarToast(`No se pudo ${estado==='aceptada'?'aceptar':'rechazar'} la cita. Intenta de nuevo.`, 'err'); return; }
