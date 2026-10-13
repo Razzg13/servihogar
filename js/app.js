@@ -946,10 +946,10 @@ async function renderCuenta(){
       <div class="card">
         <h3 style="font-size:15px; margin-bottom:14px;">Datos de la cuenta</h3>
         <div id="cuenta-msg" role="status" aria-live="polite"></div>
-        <div class="field"><label for="cuenta-nombre">Nombre completo</label><input id="cuenta-nombre" value="${esc(u.nombre)}"></div>
-        <div class="field"><label for="cuenta-correo">Correo electrónico</label><input id="cuenta-correo" value="${esc(u.correo||'')}" disabled></div>
+        <div class="field"><label for="cuenta-nombre">Nombre completo</label><input id="cuenta-nombre" autocomplete="name" value="${esc(u.nombre)}"></div>
+        <div class="field"><label for="cuenta-correo">Correo electrónico</label><input id="cuenta-correo" autocomplete="email" value="${esc(u.correo||'')}" disabled></div>
         <p style="font-size:11.5px; color:var(--ink-soft); margin:-10px 0 14px;">Para cambiar el correo con el que iniciás sesión, escribinos desde <a href="#/pqr">PQR</a>.</p>
-        <div class="field"><label for="cuenta-celular">Celular (para avisos por WhatsApp)</label><input type="tel" id="cuenta-celular" value="${esc(u.celular||'')}" placeholder="Ej. 3001234567"></div>
+        <div class="field"><label for="cuenta-celular">Celular (para avisos por WhatsApp)</label><input type="tel" id="cuenta-celular" autocomplete="tel" value="${esc(u.celular||'')}" placeholder="Ej. 3001234567"></div>
         <button class="btn btn-primary" onclick="guardarCuenta(this)">Guardar cambios</button>
       </div>
       <div>
@@ -964,10 +964,10 @@ async function renderCuenta(){
           <h3 style="font-size:15px; margin-bottom:14px;">Cambiar contraseña</h3>
           <div id="cuenta-pass-msg" role="status" aria-live="polite"></div>
           <div class="field"><label for="cuenta-pass">Nueva contraseña</label>
-            <div class="password-field"><input type="password" id="cuenta-pass" minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('cuenta-pass', this)">👁</button></div>
+            <div class="password-field"><input type="password" id="cuenta-pass" autocomplete="new-password" minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('cuenta-pass', this)">👁</button></div>
           </div>
           <div class="field"><label for="cuenta-pass2">Confirmar nueva contraseña</label>
-            <div class="password-field"><input type="password" id="cuenta-pass2" minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('cuenta-pass2', this)">👁</button></div>
+            <div class="password-field"><input type="password" id="cuenta-pass2" autocomplete="new-password" minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('cuenta-pass2', this)">👁</button></div>
           </div>
           <button class="btn btn-outline" style="width:100%;" onclick="cambiarContrasenaCuenta(this)">Actualizar contraseña</button>
         </div>

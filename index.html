@@ -208,9 +208,9 @@
       <div id="auth-msg" role="status" aria-live="polite"></div>
 
       <form id="form-login" onsubmit="return doLogin(event)">
-        <div class="field"><label for="login-email">Correo electrónico</label><input type="email" id="login-email" required></div>
+        <div class="field"><label for="login-email">Correo electrónico</label><input type="email" id="login-email" autocomplete="email" required></div>
         <div class="field"><label for="login-pass">Contraseña</label>
-          <div class="password-field"><input type="password" id="login-pass" required><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('login-pass', this)">👁</button></div>
+          <div class="password-field"><input type="password" id="login-pass" autocomplete="current-password" required><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('login-pass', this)">👁</button></div>
         </div>
         <button class="btn btn-primary" style="width:100%;" type="submit">Iniciar sesión</button>
         <p style="text-align:center; margin-top:12px;"><button type="button" class="link-btn" onclick="mostrarRecuperar()">¿Olvidaste tu contraseña?</button></p>
@@ -218,7 +218,7 @@
 
       <form id="form-forgot" class="hidden" onsubmit="return enviarRecuperacion(event)">
         <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:14px;">Escribe tu correo y te enviamos un enlace para restablecer tu contraseña.</p>
-        <div class="field"><label for="forgot-email">Correo electrónico</label><input type="email" id="forgot-email" required></div>
+        <div class="field"><label for="forgot-email">Correo electrónico</label><input type="email" id="forgot-email" autocomplete="email" required></div>
         <button class="btn btn-primary" style="width:100%;" type="submit">Enviar enlace de recuperación</button>
         <p style="text-align:center; margin-top:14px;"><button type="button" class="link-btn" onclick="switchAuthTab('login')">← Volver a iniciar sesión</button></p>
       </form>
@@ -230,14 +230,14 @@
             <option value="trabajador">Trabajador — quiero ofrecer un servicio</option>
           </select>
         </div>
-        <div class="field"><label for="reg-nombre">Nombre completo</label><input id="reg-nombre" required></div>
-        <div class="field"><label for="reg-email">Correo electrónico</label><input type="email" id="reg-email" required></div>
-        <div class="field"><label for="reg-celular">Celular (opcional, para avisos por WhatsApp)</label><input type="tel" id="reg-celular" placeholder="Ej. 3001234567"></div>
+        <div class="field"><label for="reg-nombre">Nombre completo</label><input id="reg-nombre" autocomplete="name" required></div>
+        <div class="field"><label for="reg-email">Correo electrónico</label><input type="email" id="reg-email" autocomplete="email" required></div>
+        <div class="field"><label for="reg-celular">Celular (opcional, para avisos por WhatsApp)</label><input type="tel" id="reg-celular" autocomplete="tel" placeholder="Ej. 3001234567"></div>
         <div class="field"><label for="reg-pass">Contraseña</label>
-          <div class="password-field"><input type="password" id="reg-pass" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('reg-pass', this)">👁</button></div>
+          <div class="password-field"><input type="password" id="reg-pass" autocomplete="new-password" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('reg-pass', this)">👁</button></div>
         </div>
         <div class="field"><label for="reg-pass2">Confirmar contraseña</label>
-          <div class="password-field"><input type="password" id="reg-pass2" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('reg-pass2', this)">👁</button></div>
+          <div class="password-field"><input type="password" id="reg-pass2" autocomplete="new-password" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('reg-pass2', this)">👁</button></div>
         </div>
         <div id="worker-fields" class="hidden">
           <div class="field"><label for="reg-cat">Categoría de servicio</label>
@@ -289,10 +289,10 @@
       <div id="resetpass-msg" role="status" aria-live="polite"></div>
       <form id="form-resetpass" onsubmit="return guardarNuevaContrasena(event)">
         <div class="field"><label for="resetpass-pass">Nueva contraseña</label>
-          <div class="password-field"><input type="password" id="resetpass-pass" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('resetpass-pass', this)">👁</button></div>
+          <div class="password-field"><input type="password" id="resetpass-pass" autocomplete="new-password" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('resetpass-pass', this)">👁</button></div>
         </div>
         <div class="field"><label for="resetpass-pass2">Confirmar contraseña</label>
-          <div class="password-field"><input type="password" id="resetpass-pass2" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('resetpass-pass2', this)">👁</button></div>
+          <div class="password-field"><input type="password" id="resetpass-pass2" autocomplete="new-password" required minlength="4"><button type="button" class="pass-toggle" aria-label="Mostrar contraseña" onclick="togglePasswordVisibility('resetpass-pass2', this)">👁</button></div>
         </div>
         <button class="btn btn-primary" style="width:100%;" type="submit">Guardar nueva contraseña</button>
       </form>
