@@ -1688,10 +1688,10 @@ async function verComparador(){
     <table><thead><tr><th></th>${trabajadores.map(w=>`<th>${esc(w.nombre)}</th>`).join('')}</tr></thead><tbody>
       <tr><td>Categoría</td>${trabajadores.map(w=>`<td>${esc(w.categoria)}</td>`).join('')}</tr>
       <tr><td>Zona</td>${trabajadores.map(w=>`<td>${esc(w.zona)}</td>`).join('')}</tr>
-      <tr><td>Calificación</td>${trabajadores.map(w=>`<td>${avg(w.resenas)||'Sin calificar'}</td>`).join('')}</tr>
-      <tr><td>Tarifa desde</td>${trabajadores.map(w=>`<td>${fmtCOP(w.tarifa)}</td>`).join('')}</tr>
-      <tr><td>Experiencia</td>${trabajadores.map(w=>`<td>${w.experiencia} años</td>`).join('')}</tr>
-      <tr><td>Verificado</td>${trabajadores.map(w=>`<td>${w.verificado?'✓ Sí':'No'}</td>`).join('')}</tr>
+      <tr><td>Calificación</td>${trabajadores.map(w=>`<td class="mono">${avg(w.resenas)?'★ '+avg(w.resenas):'Sin calificar'}</td>`).join('')}</tr>
+      <tr><td>Tarifa desde</td>${trabajadores.map(w=>`<td class="mono">${fmtCOP(w.tarifa)}</td>`).join('')}</tr>
+      <tr><td>Experiencia</td>${trabajadores.map(w=>`<td class="mono">${w.experiencia} años</td>`).join('')}</tr>
+      <tr><td>Verificado</td>${trabajadores.map(w=>`<td>${w.verificado?'<span class="verif-badge">✓ Sí</span>':'No'}</td>`).join('')}</tr>
       <tr><td>Servicios</td>${trabajadores.map(w=>`<td>${(w.servicios||[]).map(s=>esc(s)).join(', ')||'—'}</td>`).join('')}</tr>
       <tr><td></td>${trabajadores.map(w=>`<td><button class="btn btn-primary" style="font-size:12px;padding:6px 10px;" onclick="verPerfil('${w.id}')">Ver perfil</button></td>`).join('')}</tr>
     </tbody></table>
