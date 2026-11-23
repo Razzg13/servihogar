@@ -228,7 +228,7 @@ const tarjetasHome = q(`document.querySelectorAll('#home-workers .pro-card').len
 const primerNombre = q(`document.querySelector('#home-workers .pro-name').textContent.trim()`);
 comprobar('La home muestra 4 profesionales destacados', tarjetasHome === 4, `${tarjetasHome} tarjetas`);
 comprobar('Ordena por calificación (Ana, 12 reseñas de 5★, primera)', /Ana/.test(primerNombre), `primera: ${primerNombre}`);
-comprobar('La home muestra 6 categorías + "Más"', q(`document.querySelectorAll('#home-cats .svc-card').length`) === 7);
+comprobar('La home muestra 6 categorías y un acceso al directorio', q(`document.querySelectorAll('#home-cats .svc-card').length`) === 7);
 comprobar('Los chips de categoría escapan bien las tildes', /Jardinería/.test(q(`document.querySelector('#home-cats .svc-card[data-cat="Jardinería"]').textContent`)));
 
 evalCtx(`(()=>{const i=document.getElementById('home-search'); i.value='jardi'; buscarDesdeHomeEnVivo();})()`);
@@ -246,6 +246,21 @@ evalCtx(`(()=>{const i=document.getElementById('home-search'); i.value=''; busca
 await esperar(400);
 
 console.log('\n--- Buscar: resumen, filtros y escape de comillas ---');
+comprobar('El selector de zona de la portada muestra Centro con un perfil',
+  q(`document.querySelector('#home-zone option[value="Centro"]')?.textContent === 'Centro (1 perfil)'`));
+evalCtx(`document.getElementById('home-zone').value = 'Centro'; pintarDestacadosHome();`);
+await esperar(120);
+comprobar('Elegir Centro filtra los perfiles de la portada',
+  q(`document.querySelectorAll('#home-workers .pro-card').length === 1 && document.querySelector('#home-workers .pro-loc').textContent.trim() === 'Centro'`));
+evalCtx(q(`document.querySelector('#home-cats [data-cat="Plomería"]').getAttribute('onclick')`));
+await esperar(120);
+comprobar('El oficio elegido conserva la zona de la portada',
+  q(`document.getElementById('v-buscar').classList.contains('active') && state.zonaFiltro === 'Centro' && state.catFiltro === 'Plomería' && state.resultadosBuscar.length === 1 && state.resultadosBuscar[0].zona === 'Centro'`));
+evalCtx(q(`document.querySelector('.home-map-link').getAttribute('onclick')`));
+await esperar(120);
+comprobar('El mapa abre con la zona elegida en portada',
+  q(`document.getElementById('btn-vista-mapa').getAttribute('aria-pressed') === 'true' && state.zonaFiltro === 'Centro' && state.resultadosBuscar.length === 1`));
+evalCtx(`document.getElementById('home-zone').value = ''; buscarDesdeHome();`);
 evalCtx(`nav('buscar')`);
 await esperar(120);
 const resumen = q(`document.getElementById('buscar-summary').textContent.replace(/\\s+/g,' ').trim()`);

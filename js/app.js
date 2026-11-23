@@ -67,7 +67,13 @@ function toggleTheme(){
   const next = document.documentElement.getAttribute('data-theme')==='dark' ? 'light' : 'dark';
   applyTheme(next); localStorage.setItem(THEME_KEY, next);
   const btn = document.getElementById('theme-toggle');
-  if(btn) btn.textContent = next==='dark' ? '☀️' : '🌙';
+  if(btn) btn.innerHTML = iconoTema(next);
+}
+function iconoTema(tema){
+  const figura = tema==='dark'
+    ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4"/>'
+    : '<path d="M20.9 13.2A9 9 0 0 1 10.8 3.1a9 9 0 1 0 10.1 10.1Z"/>';
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${figura}</svg>`;
 }
 
 async function addNotificacion(userId, texto){
@@ -283,7 +289,7 @@ const SERVICIOS_SUGERIDOS = {
   'Cerrajería': ['Apertura de puertas', 'Cambio de cerraduras', 'Cajas fuertes', 'Duplicado de llaves'],
 };
 function iconSVG(cat){
-  return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">${ICONS[cat]||''}</svg>`;
+  return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">${ICONS[cat]||''}</svg>`;
 }
 // Reemplazan los emoji 🟢/📍 usados como ícono funcional (no decorativo): esos
 // se renderizan como emoji nativo del sistema operativo (glossy, multicolor) y
@@ -655,8 +661,10 @@ function toggleMobileNav(){
 document.addEventListener('click', e=>{
   if(!state.mobileNavOpen) return;
   const links = document.getElementById('navlinks');
+  const auth = document.getElementById('navauth');
   const toggle = document.getElementById('menu-toggle');
-  if(links && toggle && !links.contains(e.target) && !toggle.contains(e.target)){
+  const ruta = e.composedPath();
+  if(!ruta.includes(links) && !ruta.includes(auth) && !ruta.includes(toggle)){
     state.mobileNavOpen = false;
     renderNav(document.querySelector('.view.active').id.replace('v-',''));
   }
@@ -666,7 +674,7 @@ document.addEventListener('click', e=>{
 document.addEventListener('keydown', e=>{
   if(e.key !== 'Enter' && e.key !== ' ') return;
   const target = e.target.closest('[role="button"]');
-  if(!target) return;
+  if(target !== e.target) return;
   e.preventDefault();
   target.click();
 });
@@ -686,6 +694,7 @@ function renderNav(active){
   if(u) linkHtml += `<button class="${active==='cuenta'?'on':''}" onclick="nav('cuenta')">Mi cuenta</button>`;
   links.innerHTML = linkHtml;
   links.classList.toggle('open', state.mobileNavOpen);
+  auth.classList.toggle('open', state.mobileNavOpen);
 
   const notifBtn = u ? `
     <div class="notif-wrap">
@@ -702,13 +711,13 @@ function renderNav(active){
     auth.innerHTML = `${pushBtn}${notifBtn}
                        <span class="userchip">Hola, ${esc(u.nombre.split(' ')[0])}</span>
                        <button class="btn btn-ghost" onclick="logout()">Cerrar sesión</button>
-                       <button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${loadTheme()==='dark'?'☀️':'🌙'}</button>`;
+                       <button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${iconoTema(loadTheme())}</button>`;
     renderNotifCount();
   } else {
     const locPill = active==='home'
       ? `<span class="nav-loc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-7.3-7-12a7 7 0 0 1 14 0c0 4.7-7 12-7 12z"/><circle cx="12" cy="9" r="2.3"/></svg>Ibagué</span>`
       : '';
-    auth.innerHTML = `${locPill}<button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${loadTheme()==='dark'?'☀️':'🌙'}</button>
+    auth.innerHTML = `${locPill}<button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema" onclick="toggleTheme()">${iconoTema(loadTheme())}</button>
                        <button class="btn btn-ghost" onclick="nav('auth'); switchAuthTab('login')">Iniciar sesión</button>
                        <button class="btn btn-primary" onclick="nav('auth'); switchAuthTab('register')">Crear cuenta</button>`;
   }
@@ -765,23 +774,12 @@ async function renderHome(){
   if(sessionUserId && !currentProfile) await cargarPerfilActual();
   if(workersBox) workersBox.innerHTML = skeletonProCards(4);
 
-  // Si existe img/hero.jpg (o .webp/.png), se usa como foto del hero; si no, queda la ilustración.
-  const heroEl = document.querySelector('.home-hero');
-  if(heroEl && !heroEl.dataset.heroChecked){
-    heroEl.dataset.heroChecked = '1';
-    ['webp','jpg','png'].forEach(ext=>{
-      const probe = new Image();
-      probe.onload = ()=>{ heroEl.classList.add('has-photo'); heroEl.style.setProperty('--hero-photo', `url("${new URL('img/hero.'+ext, document.baseURI).href}")`); };
-      probe.src = `img/hero.${ext}`;
-    });
-  }
-
   const catsBox = document.getElementById('home-cats');
   if(catsBox){
-    const iconMas = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>`;
+    const flecha = '<svg class="svc-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4"/></svg>';
     catsBox.innerHTML = CATS.map(c=>
-      `<button class="svc-card" data-cat="${esc(c.n)}" onclick="irABuscarConCategoria('${esc(c.n)}')"><span class="ic-wrap">${iconSVG(c.n)}</span><span>${esc(c.n)}</span></button>`
-    ).join('') + `<button class="svc-card svc-card--more" onclick="nav('buscar')"><span class="ic-wrap">${iconMas}</span><span>Más</span></button>`;
+      `<button type="button" class="svc-card" data-cat="${esc(c.n)}" onclick="buscarDesdeHome({categoria:'${esc(c.n)}'})">${iconSVG(c.n)}<span>${esc(c.n)}</span>${flecha}</button>`
+    ).join('') + `<button type="button" class="svc-card svc-card--more" onclick="buscarDesdeHome()">Abrir directorio ${flecha}</button>`;
   }
 
   await pintarDestacadosHome();
@@ -791,28 +789,33 @@ async function renderHome(){
 // esta parte en cada tecla: así hay respuesta visible sin salir de la portada.
 async function pintarDestacadosHome(){
   const workersBox = document.getElementById('home-workers');
+  const selectorZona = document.getElementById('home-zone');
   if(!workersBox) return;
-  const q = textoBusquedaHome();
   try {
     const trabajadores = await cargarTrabajadores();
     const activos = trabajadores.filter(u=>u.estado==='activo');
-    const statWorkers = document.getElementById('hh-stat-workers');
-    const statRating = document.getElementById('hh-stat-rating');
-    if(statWorkers) statWorkers.textContent = activos.length || '—';
-    if(statRating){
-      const todasResenas = activos.flatMap(u=>u.resenas||[]);
-      statRating.textContent = todasResenas.length
-        ? `★ ${(todasResenas.reduce((a,r)=>a+r.estrellas,0)/todasResenas.length).toFixed(1)}`
-        : '—';
+    if(selectorZona){
+      const zonas = zonasDeTrabajadores(activos);
+      const firma = JSON.stringify(zonas);
+      if(selectorZona.dataset.zonas !== firma){
+        const anterior = selectorZona.value;
+        selectorZona.innerHTML = '<option value="">Todas las zonas</option>' + zonas.map(([zona, cantidad])=>
+          `<option value="${esc(zona)}">${esc(zona)} (${cantidad} ${cantidad===1?'perfil':'perfiles'})</option>`
+        ).join('');
+        selectorZona.value = zonas.some(([zona])=>zona===anterior) ? anterior : '';
+        selectorZona.dataset.zonas = firma;
+      }
     }
+    const q = textoBusquedaHome();
+    const zona = selectorZona?.value;
     const destacados = activos
-      .filter(u=>coincideBusqueda(u, q))
+      .filter(u=>(!zona || u.zona?.trim()===zona) && coincideBusqueda(u, q))
       .sort((a,b)=>(avg(b.resenas)||0)-(avg(a.resenas)||0)).slice(0,4);
     workersBox.innerHTML = destacados.length
       ? destacados.map(proCardHTML).join('')
       : `<div class="empty-note">${q
             ? `Ningún profesional coincide con “${esc(q)}”. <button type="button" class="link-btn" onclick="buscarDesdeHome()">Buscar en todo el directorio</button>`
-            : 'Todavía no hay profesionales para mostrar.'}</div>`;
+            : zona ? 'No hay profesionales para mostrar en la zona elegida.' : 'Todavía no hay profesionales para mostrar.'}</div>`;
   } catch(e){
     // No se cachea el fallo (ver cargarTrabajadores): así el botón "Reintentar"
     // vuelve a consultar de verdad en vez de recibir una lista vacía cacheada.
@@ -884,30 +887,32 @@ function workerCardHTML(w, opts={}){
   const distancia = state.miUbicacion ? distanciaKm(state.miUbicacion, coordsForWorker(w)) : null;
   const insignias = insigniasTrabajador(w.resenas).map(i=>`<span class="insignia-badge" title="${esc(i.texto)}">${i.icono} ${esc(i.texto)}</span>`).join('');
   const n = (w.resenas || []).length;
+  const enDirectorio = opts.comparador === true;
   const compararCheckbox = opts.comparador ? `<label class="compare-check" onclick="event.stopPropagation();">
     <input type="checkbox" ${state.compararIds.includes(w.id)?'checked':''} onchange="toggleComparar('${w.id}', this.checked)"> Comparar</label>` : '';
   const pills = [
+    enDirectorio && w.verificado ? '<span class="rating-pill identidad-verificada">✓ Identidad verificada</span>' : '',
     w.disponible_ahora ? `<span class="rating-pill disp-ahora">${ICONO_DISPONIBLE}Disponible ahora</span>` : '',
     distancia!==null ? `<span class="rating-pill dist">${ICONO_UBICACION}${distancia<1 ? Math.round(distancia*1000)+' m' : distancia.toFixed(1)+' km'}</span>` : '',
   ].filter(Boolean).join('');
-  return `<div class="pro-card pro-card--list" role="button" tabindex="0" aria-label="Ver perfil de ${esc(w.nombre)}" onclick="verPerfil('${w.id}')">
+  return `<div class="pro-card pro-card--list${enDirectorio?' pro-card--directory':''}" ${enDirectorio?'':`role="button" tabindex="0" aria-label="Ver perfil de ${esc(w.nombre)}"`} onclick="verPerfil('${w.id}')">
     <div class="pro-top">
       <div class="pro-photo">
         ${avatarHTML(w.nombre, w.foto_url)}
         ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="event.stopPropagation(); toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
       </div>
       <div class="pro-body">
-        <div class="pro-name"><span class="pro-name-text" title="${esc(w.nombre)}">${esc(w.nombre)}</span>${w.verificado?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}${w.antecedentes_verificado?' <span class="verif-badge" title="Antecedentes judiciales verificados">🛡️</span>':''}</div>
+        <div class="pro-name"><span class="pro-name-text" title="${esc(w.nombre)}">${esc(w.nombre)}</span>${w.verificado && !enDirectorio?' <span class="verif-badge" title="Identidad verificada">✓</span>':''}${w.antecedentes_verificado?' <span class="verif-badge" title="Antecedentes judiciales verificados">🛡️</span>':''}</div>
         <div class="pro-cat">${esc(w.categoria || '')}${w.zona?` · ${esc(w.zona)}`:''}</div>
         <div class="pro-rating">${rating ? `★ ${rating} <span>(${n} ${n===1?'reseña':'reseñas'})</span>` : 'Sin calificaciones aún'}</div>
-        ${(insignias || pills) ? `<div class="pro-pills">${insignias}${pills}</div>` : ''}
+        ${(insignias || pills) ? `<div class="pro-pills">${pills}${insignias}</div>` : ''}
       </div>
     </div>
     <div class="pro-stub">
       <div class="pro-price">Desde ${fmtCOP(w.tarifa)}</div>
       <div class="pro-actions">
-        <button class="btn btn-outline" onclick="event.stopPropagation(); verPerfil('${w.id}')">Ver perfil</button>
-        <button class="btn btn-primary" onclick="event.stopPropagation(); irAAgendar('${w.id}')">Agendar</button>
+        <button class="btn ${enDirectorio?'btn-primary':'btn-outline'}" aria-label="Ver perfil de ${esc(w.nombre)}" onclick="event.stopPropagation(); verPerfil('${w.id}')">Ver perfil</button>
+        ${enDirectorio?'':`<button class="btn btn-primary" onclick="event.stopPropagation(); irAAgendar('${w.id}')">Agendar</button>`}
       </div>
     </div>
     ${compararCheckbox}
@@ -1282,14 +1287,13 @@ async function enviarPQR(){
   });
 }
 
-function irABuscarConCategoria(cat){ state.catFiltro = cat; state.servicioFiltro = null; nav('buscar'); }
-// "Buscar profesionales" desde la home: lleva el término escrito al buscador
-// completo y abre esa vista. El filtrado en vivo de la portada está en
-// buscarDesdeHomeEnVivo / pintarDestacadosHome.
-function buscarDesdeHome(){
+function buscarDesdeHome({categoria=null, vista='lista'}={}){
+  clearTimeout(temporizadorBusquedaHome);
+  restablecerFiltrosBuscar();
   sincronizarBusqueda(textoBusquedaHome());
-  state.catFiltro = null;
-  state.servicioFiltro = null;
+  state.catFiltro = categoria;
+  state.zonaFiltro = document.getElementById('home-zone')?.value || null;
+  state.vistaBuscar = vista;
   nav('buscar');
 }
 
@@ -1529,12 +1533,8 @@ async function renderBuscar(){
   // el propio filtro de zona para que el chip elegido no desaparezca.
   const zonaBox = document.getElementById('buscar-zona-chips');
   if(zonaBox){
-    const zonasPresentes = [...new Set(results.map(w=>(w.zona||'').trim()).filter(z=>z && z!=='Sin definir'))]
-      .sort((a,b)=>{
-        const ia = ZONAS_IBAGUE.findIndex(z=>z.nombre===a), ib = ZONAS_IBAGUE.findIndex(z=>z.nombre===b);
-        return (ia<0?999:ia) - (ib<0?999:ib);
-      });
-    zonaBox.innerHTML = zonasPresentes.length ? zonasPresentes.map(z=>
+    const zonasPresentes = zonasDeTrabajadores(results);
+    zonaBox.innerHTML = zonasPresentes.length ? zonasPresentes.map(([z])=>
       `<button type="button" class="chipbtn sm ${state.zonaFiltro===z?'on':''}" aria-pressed="${state.zonaFiltro===z}" onclick="setZonaFiltro(${esc(JSON.stringify(z))})">📍 ${esc(z)}</button>`
     ).join('') : '';
   }
@@ -1573,7 +1573,7 @@ async function renderBuscar(){
   renderComparadorBar();
   renderResumenBuscar(results, q);
   state.resultadosBuscar = results;
-  if(state.vistaBuscar==='mapa') initMapaBuscar(results);
+  setVistaBuscar(state.vistaBuscar);
 }
 // Resumen de resultados + filtros activos. Los filtros se muestran acá (y no
 // repartidos por la interfaz) para que en celular se entienda por qué la lista
@@ -1594,12 +1594,12 @@ function renderResumenBuscar(results, q){
   if(q) activos.push({tipo:'texto', label:`“${q}”`});
 
   const filtrosHTML = activos.length
-    ? `<span>Filtros: ${activos.map(a=>esc(a.label)).join(' · ')}
+    ? `<span class="results-filters">Filtros: ${activos.map(a=>esc(a.label)).join(' · ')}
         <button type="button" class="link-btn" style="margin-left:6px;" onclick="limpiarFiltrosBuscar()">Limpiar</button></span>`
     : '';
 
   summary.innerHTML = `<span>${results.length} ${results.length===1?'resultado':'resultados'}</span>
-    <span>${verificados} verificados</span>
+    <span>${verificados} ${verificados===1?'verificado':'verificados'}</span>
     <span>${minTarifa ? 'Desde '+fmtCOP(minTarifa) : 'Sin tarifas'}</span>
     ${filtrosHTML}`;
 }
@@ -1633,7 +1633,21 @@ function limpiarFiltrosSecundarios(){
   if(radio) radio.value = '';
   renderBuscar();
 }
-function limpiarFiltrosBuscar(){
+function zonasDeTrabajadores(trabajadores){
+  const conteo = new Map();
+  for(const trabajador of trabajadores){
+    const zona = (trabajador.zona||'').trim();
+    if(zona && zona!=='Sin definir') conteo.set(zona, (conteo.get(zona)||0) + 1);
+  }
+  const zonasConocidas = [];
+  for(const {nombre} of ZONAS_IBAGUE){
+    if(!conteo.has(nombre)) continue;
+    zonasConocidas.push([nombre, conteo.get(nombre)]);
+    conteo.delete(nombre);
+  }
+  return [...zonasConocidas, ...conteo];
+}
+function restablecerFiltrosBuscar(){
   state.catFiltro = null;
   state.servicioFiltro = null;
   state.zonaFiltro = null;
@@ -1645,6 +1659,9 @@ function limpiarFiltrosBuscar(){
   if(radio) radio.value = '';
   const orden = document.getElementById('buscar-orden');
   if(orden) orden.value = 'relevancia';
+}
+function limpiarFiltrosBuscar(){
+  restablecerFiltrosBuscar();
   renderBuscar();
 }
 function setCatFiltro(cat){ state.catFiltro = cat || null; state.servicioFiltro = null; renderBuscar(); }
@@ -1720,6 +1737,7 @@ function setVistaBuscar(vista){
   }
   document.getElementById('buscar-results').classList.toggle('hidden', vista==='mapa');
   document.getElementById('buscar-mapa-box').classList.toggle('hidden', vista!=='mapa');
+  document.getElementById('buscar-mapa-nota').classList.toggle('hidden', vista!=='mapa');
   if(vista==='mapa') initMapaBuscar(state.resultadosBuscar||[]);
 }
 function initMapaBuscar(results){
@@ -1730,27 +1748,30 @@ function initMapaBuscar(results){
   // Círculos de "oferta por zona" (uno por zona distinta, tamaño según cuántos
   // trabajadores hay ahí): de un vistazo, dónde hay más opciones y dónde hay
   // poca oferta, antes de fijarse en los pines individuales de abajo.
-  const conteoPorZona = new Map();
-  results.forEach(w=>{
-    const zona = (w.zona||'Sin definir').trim();
-    conteoPorZona.set(zona, (conteoPorZona.get(zona)||0) + 1);
-  });
-  const maxConteo = Math.max(1, ...conteoPorZona.values());
-  conteoPorZona.forEach((n, zona)=>{
-    L.circle(coordsForZona(zona), {
+  const ubicados = results.filter(tieneUbicacionReal);
+  const conteos = zonasDeTrabajadores(ubicados).filter(([zona])=>coordsZonaIbague(zona));
+  const maxConteo = Math.max(1, ...conteos.map(([,cantidad])=>cantidad));
+  conteos.forEach(([zona, n])=>{
+    L.circle(coordsZonaIbague(zona), {
       radius: 250 + (n / maxConteo) * 550,
       color: '#1C2B39', weight: 1, fillColor: '#1C2B39', fillOpacity: 0.08
     }).addTo(mapBuscar).bindPopup(`<b>${esc(zona)}</b><br>${n} trabajador${n===1?'':'es'}`);
   });
 
-  results.forEach(w=>{
+  ubicados.forEach(w=>{
     const coords = coordsForWorker(w);
-    L.marker(coords, {icon:pinIcon('#BD5818', w.categoria)}).addTo(mapBuscar)
+    L.marker(coords, {icon:pinIcon('var(--action)', w.categoria)}).addTo(mapBuscar)
       .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}<br><a href="#" onclick="verPerfil('${w.id}'); return false;">Ver perfil →</a>`);
   });
   if(state.miUbicacion){
     L.marker(state.miUbicacion, {icon:pinIcon('#2F8F94')}).addTo(mapBuscar).bindPopup('<b>Tu ubicación</b>');
   }
+  const nota = document.getElementById('buscar-mapa-nota');
+  const sinUbicacion = results.length - ubicados.length;
+  if(!results.length) nota.textContent = 'No hay perfiles para esta búsqueda.';
+  else if(!ubicados.length) nota.textContent = 'Los perfiles de esta búsqueda no tienen ubicación registrada. Puedes verlos en Lista.';
+  else if(sinUbicacion) nota.textContent = `${sinUbicacion} ${sinUbicacion===1?'perfil sin ubicación registrada aparece':'perfiles sin ubicación registrada aparecen'} en Lista.`;
+  else nota.textContent = 'Confirma con el profesional si atiende en tu dirección.';
   setTimeout(()=>mapBuscar && mapBuscar.invalidateSize(), 80);
 }
 
@@ -1770,16 +1791,25 @@ async function verPerfil(workerId){
   document.getElementById('perfil-content').innerHTML = `
     <div class="profile-grid">
       <div>
-        <div class="card">
+        <div class="card profile-main">
           <div class="profile-header">
             ${avatarHTML(w.nombre, w.foto_url)}
-            <div style="flex:1;"><h2>${esc(w.nombre)} ${w.verificado?'<span class="verif-badge" title="Identidad verificada">✓ Identidad</span>':''} ${w.antecedentes_verificado?'<span class="verif-badge" title="Antecedentes judiciales verificados">🛡️ Antecedentes</span>':''} ${w.disponible_ahora?`<span class="rating-pill disp-ahora" style="vertical-align:middle;">${ICONO_DISPONIBLE}Disponible ahora</span>`:''} ${insignias}</h2><div class="role">${esc(w.categoria.toUpperCase())} · ${w.experiencia} AÑOS DE EXPERIENCIA</div></div>
+            <div class="profile-identity">
+              <h2>${esc(w.nombre)}</h2>
+              <div class="role">${esc(w.categoria)} · ${w.experiencia} ${Number(w.experiencia)===1?'año':'años'} de experiencia</div>
+              <div class="profile-badges">
+                ${w.verificado?'<span class="rating-pill identidad-verificada">✓ Identidad verificada</span>':''}
+                ${w.antecedentes_verificado?'<span class="verif-badge" title="Antecedentes judiciales verificados">🛡️ Antecedentes</span>':''}
+                ${w.disponible_ahora?`<span class="rating-pill disp-ahora">${ICONO_DISPONIBLE}Disponible ahora</span>`:''}
+                ${insignias}
+              </div>
+            </div>
             ${u && u.tipo==='cliente' ? `<button class="fav-btn ${esFav?'on':''}" aria-label="Guardar en favoritos" onclick="toggleFavorito('${w.id}')">${esFav?'♥':'♡'}</button>` : ''}
             <button class="icon-btn" style="color:var(--navy); border-color:var(--line);" aria-label="Compartir perfil" onclick="compartirPerfil('${w.id}')">🔗</button>
           </div>
           <div class="spec-sheet">
             <div class="spec-item"><div class="k">Calificación</div><div class="v">${rating || '—'}</div></div>
-            <div class="spec-item"><div class="k">Trabajos hechos</div><div class="v">${w.resenas.length}</div></div>
+            <div class="spec-item"><div class="k">Reseñas</div><div class="v">${w.resenas.length}</div></div>
             <div class="spec-item"><div class="k">Zona</div><div class="v">${esc(w.zona)}</div></div>
             <div class="spec-item"><div class="k">Tarifa desde</div><div class="v">${fmtCOP(w.tarifa)}</div></div>
           </div>
@@ -1800,10 +1830,10 @@ async function verPerfil(workerId){
         </div>
       </div>
       <div class="perfil-sidebar">
-        <div class="card" style="margin-bottom:16px;">
-          <h3 style="font-size:14px; margin-bottom:12px;">Solicitar este servicio</h3>
+        <div class="card profile-booking">
+          <h3>Solicitar este servicio</h3>
           <p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:16px;">Elige un día y una hora para que ${esc(w.nombre.split(' ')[0])} confirme tu cita.</p>
-          ${!w.verificado && !w.resenas.length ? `<p style="font-size:11.5px; color:var(--orange-deep); background:rgba(232,117,44,0.1); padding:8px 10px; border-radius:8px; margin-bottom:12px;">ℹ️ ${esc(w.nombre.split(' ')[0])} es nuevo en Hogandia — todavía sin reseñas ni verificación de identidad.</p>` : ''}
+          ${!w.verificado && !w.resenas.length ? `<p style="font-size:11.5px; color:var(--action-text); background:var(--ocobo-soft); padding:8px 10px; border-radius:8px; margin-bottom:12px;">ℹ️ ${esc(w.nombre.split(' ')[0])} es nuevo en Hogandia — todavía sin reseñas ni verificación de identidad.</p>` : ''}
           <button class="btn btn-primary" style="width:100%;" onclick="irAAgendar('${w.id}')">Agendar cita</button>
           ${u && u.tipo==='cliente' ? `<button class="btn btn-outline" style="width:100%;margin-top:8px;" onclick="contactarTrabajador('${w.id}', this)">💬 Preguntar antes de agendar</button>` : ''}
           <div id="perfil-chat-panel" style="margin-top:12px;"></div>
@@ -1842,7 +1872,7 @@ function initMapaPerfil(w){
   if(mapPerfil){ mapPerfil.remove(); mapPerfil = null; }
   mapPerfil = L.map('perfil-mapa', {zoomControl:false, attributionControl:false}).setView(coords, 13);
   tileLayer(mapPerfil);
-  L.marker(coords, {icon:pinIcon('#BD5818', w.categoria)}).addTo(mapPerfil)
+  L.marker(coords, {icon:pinIcon('var(--action)', w.categoria)}).addTo(mapPerfil)
     .bindPopup(`<b>${esc(w.nombre)}</b><br>${esc(w.categoria)} · ${esc(w.zona)}`);
   if(w.radio_cobertura_km){
     const circulo = L.circle(coords, {
@@ -1998,7 +2028,7 @@ async function renderSlots(){
   const urgenciaMsg = document.getElementById('agendar-urgencia-msg');
   if(urgenciaMsg){
     urgenciaMsg.innerHTML = (esHoy && w.tarifa_urgente)
-      ? `<div class="msg" style="background:#FCEFE3;color:var(--orange-deep);margin-bottom:12px;">⚡ Estás agendando para hoy — se aplica un recargo por urgencia de ${fmtCOP(w.tarifa_urgente)}.</div>`
+      ? `<div class="msg" style="background:var(--ocobo-soft);color:var(--action-text);margin-bottom:12px;">⚡ Estás agendando para hoy — se aplica un recargo por urgencia de ${fmtCOP(w.tarifa_urgente)}.</div>`
       : '';
   }
   const disponibles = horasDisponiblesDia(w.disponibilidad, dia);
@@ -3704,7 +3734,7 @@ async function renderEstadisticas(){
       ${citas.length ? topTrabajadores.map(t=>`
         <div class="stat-bar-row">
           <span class="stat-bar-label">${esc(t.w.nombre)}</span>
-          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(t.n/maxTop)*100}%; background:var(--orange);"></div></div>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(t.n/maxTop)*100}%; background:var(--action);"></div></div>
           <span class="stat-bar-n">${t.n}</span>
         </div>`).join('') : `<div class="empty-note">Aún no hay citas registradas.</div>`}
     </div>
@@ -3724,7 +3754,7 @@ async function renderEstadisticas(){
         return `
         <div class="stat-bar-row">
           <span class="stat-bar-label">${c.n}</span>
-          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(prom/5)*100}%; background:var(--orange);"></div></div>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(prom/5)*100}%; background:var(--action);"></div></div>
           <span class="stat-bar-n">★${prom.toFixed(1)}</span>
         </div>`;
       }).join('') : `<div class="empty-note">Todavía no hay reseñas.</div>`}

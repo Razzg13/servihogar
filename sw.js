@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hogandia-v3';
+const CACHE_NAME = 'hogandia-v10';
 
 // Todo lo del propio origen (HTML/CSS/JS/imágenes) va con RED-PRIMERO: si hay
 // conexión siempre se sirve la versión más nueva del deploy; el caché es solo el
@@ -14,6 +14,9 @@ const PRECACHE_ASSETS = [
   './js/supabase-config.js',
   './manifest.json',
   './img/icon-192.png',
+  './img/logo-header.png',
+  './img/ocobo.svg',
+  './img/ibague-plaza-bolivar.jpg',
 ];
 
 // Sólo estos se sirven directo del caché sin ir a red (no cambian nunca por nombre).
