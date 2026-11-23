@@ -65,19 +65,19 @@ test('insigniasTrabajador: promedio alto con pocas reseñas no llega a "Top cali
 
 test('insigniasTrabajador: "Recomendado" con promedio >=4.5 y al menos 3 reseñas', () => {
   const resenas = [{ estrellas: 5 }, { estrellas: 4 }, { estrellas: 5 }];
-  assert.deepEqual(insigniasTrabajador(resenas), [{ icono: '⭐', texto: 'Recomendado' }]);
+  assert.deepEqual(insigniasTrabajador(resenas), [{ icono: 'star', texto: 'Recomendado' }]);
 });
 
 test('insigniasTrabajador: "Top calificado" con promedio >=4.8 y al menos 5 reseñas (excluye "Recomendado")', () => {
   const resenas = Array(5).fill({ estrellas: 5 });
-  assert.deepEqual(insigniasTrabajador(resenas), [{ icono: '🏆', texto: 'Top calificado' }]);
+  assert.deepEqual(insigniasTrabajador(resenas), [{ icono: 'award', texto: 'Top calificado' }]);
 });
 
 test('insigniasTrabajador: "Muy solicitado" con 10+ reseñas se combina con la de calificación', () => {
   const resenas = Array(10).fill({ estrellas: 5 });
   assert.deepEqual(insigniasTrabajador(resenas), [
-    { icono: '🏆', texto: 'Top calificado' },
-    { icono: '🔥', texto: 'Muy solicitado' },
+    { icono: 'award', texto: 'Top calificado' },
+    { icono: 'trend', texto: 'Muy solicitado' },
   ]);
 });
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hogandia-v10';
+const CACHE_NAME = 'hogandia-v14';
 
 // Todo lo del propio origen (HTML/CSS/JS/imágenes) va con RED-PRIMERO: si hay
 // conexión siempre se sirve la versión más nueva del deploy; el caché es solo el
@@ -16,6 +16,7 @@ const PRECACHE_ASSETS = [
   './img/icon-192.png',
   './img/logo-header.png',
   './img/ocobo.svg',
+  './img/ui-icons.svg',
   './img/ibague-plaza-bolivar.jpg',
 ];
 

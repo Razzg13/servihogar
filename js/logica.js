@@ -53,9 +53,9 @@ function insigniasTrabajador(resenas){
   const n = (resenas || []).length;
   const prom = n ? Number(avg(resenas)) : null;
   const insignias = [];
-  if(prom !== null && prom >= 4.8 && n >= 5) insignias.push({icono:'🏆', texto:'Top calificado'});
-  else if(prom !== null && prom >= 4.5 && n >= 3) insignias.push({icono:'⭐', texto:'Recomendado'});
-  if(n >= 10) insignias.push({icono:'🔥', texto:'Muy solicitado'});
+  if(prom !== null && prom >= 4.8 && n >= 5) insignias.push({icono:'award', texto:'Top calificado'});
+  else if(prom !== null && prom >= 4.5 && n >= 3) insignias.push({icono:'star', texto:'Recomendado'});
+  if(n >= 10) insignias.push({icono:'trend', texto:'Muy solicitado'});
   return insignias;
 }
 

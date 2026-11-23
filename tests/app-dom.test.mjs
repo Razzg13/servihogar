@@ -68,6 +68,7 @@ const PERFILES = [
   },
 ];
 
+const escrituras = [];
 class Consulta {
   constructor(tablas, tabla) {
     this.tablas = tablas;
@@ -105,6 +106,7 @@ class Consulta {
   _resolver() {
     if (this.accion !== 'select') {
       const fila = Array.isArray(this.cuerpo) ? this.cuerpo[0] : (this.cuerpo || {});
+      escrituras.push({tabla:this.tabla, accion:this.accion, fila});
       const conId = { id: 'nuevo-id', ...fila };
       return { data: this.una ? conId : [conId], error: null };
     }
@@ -156,9 +158,13 @@ ventana.supabase = { createClient: () => crearClienteSupabase(tablas) };
 // esto `verPerfil` cortaría con "L is not defined". Solo se implementa el
 // encadenado que usa app.js.
 const cadena = () => {
+  let centro = {lat:4.4434102,lng:-75.2411640};
   const o = {
-    setView: () => o, addTo: () => o, bindPopup: () => o, fitBounds: () => o,
-    getBounds: () => o, invalidateSize: () => o, remove: () => o,
+    setView: ([lat,lng]) => { centro={lat,lng}; return o; },
+    panTo: punto => { centro={...punto}; return o; },
+    addTo: () => o, bindPopup: () => o, fitBounds: () => o,
+    getBounds: () => o, invalidateSize: () => o, remove: () => o, on: () => o,
+    getCenter: () => centro,
   };
   return o;
 };
@@ -227,6 +233,8 @@ console.log('\n--- Home: destacados y buscador en vivo ---');
 const tarjetasHome = q(`document.querySelectorAll('#home-workers .pro-card').length`);
 const primerNombre = q(`document.querySelector('#home-workers .pro-name').textContent.trim()`);
 comprobar('La home muestra 4 profesionales destacados', tarjetasHome === 4, `${tarjetasHome} tarjetas`);
+comprobar('Las tarjetas de portada llevan al perfil antes de agendar',
+  q(`document.querySelectorAll('#home-workers .pro-actions .btn-primary').length === 4 && Array.from(document.querySelectorAll('#home-workers .pro-actions button')).every(b=>b.textContent.trim()==='Ver perfil')`));
 comprobar('Ordena por calificación (Ana, 12 reseñas de 5★, primera)', /Ana/.test(primerNombre), `primera: ${primerNombre}`);
 comprobar('La home muestra 6 categorías y un acceso al directorio', q(`document.querySelectorAll('#home-cats .svc-card').length`) === 7);
 comprobar('Los chips de categoría escapan bien las tildes', /Jardinería/.test(q(`document.querySelector('#home-cats .svc-card[data-cat="Jardinería"]').textContent`)));
@@ -247,19 +255,29 @@ await esperar(400);
 
 console.log('\n--- Buscar: resumen, filtros y escape de comillas ---');
 comprobar('El selector de zona de la portada muestra Centro con un perfil',
-  q(`document.querySelector('#home-zone option[value="Centro"]')?.textContent === 'Centro (1 perfil)'`));
-evalCtx(`document.getElementById('home-zone').value = 'Centro'; pintarDestacadosHome();`);
+  q(`document.querySelector('#home-zone option[value="Comuna 1 - Centro"]')?.textContent === 'Comuna 1 - Centro (1 perfil)'`));
+comprobar('Un profesional aparece en las comunas que cubre aunque viva en otra',
+  q(`(()=>{ const w={zona:'Centro', zonas_servicio:['Comuna 8 - Ciudadela','Comuna 5 - Jordán']}; return atiendeZona(w, 'Comuna 8 - Ciudadela') && atiendeZona(w, 'Comuna 5 - Jordán') && !atiendeZona(w, 'Centro'); })()`));
+evalCtx(`document.getElementById('home-zone').value = 'Comuna 1 - Centro'; pintarDestacadosHome();`);
 await esperar(120);
 comprobar('Elegir Centro filtra los perfiles de la portada',
-  q(`document.querySelectorAll('#home-workers .pro-card').length === 1 && document.querySelector('#home-workers .pro-loc').textContent.trim() === 'Centro'`));
+  q(`document.querySelectorAll('#home-workers .pro-card').length === 1 && document.querySelector('#home-workers .pro-loc').textContent.trim() === 'Comuna 1 - Centro'`));
 evalCtx(q(`document.querySelector('#home-cats [data-cat="Plomería"]').getAttribute('onclick')`));
 await esperar(120);
 comprobar('El oficio elegido conserva la zona de la portada',
-  q(`document.getElementById('v-buscar').classList.contains('active') && state.zonaFiltro === 'Centro' && state.catFiltro === 'Plomería' && state.resultadosBuscar.length === 1 && state.resultadosBuscar[0].zona === 'Centro'`));
+  q(`document.getElementById('v-buscar').classList.contains('active') && state.zonaFiltro === 'Comuna 1 - Centro' && state.catFiltro === 'Plomería' && state.resultadosBuscar.length === 1 && state.resultadosBuscar[0].zona === 'Centro'`));
 evalCtx(q(`document.querySelector('.home-map-link').getAttribute('onclick')`));
 await esperar(120);
 comprobar('El mapa abre con la zona elegida en portada',
-  q(`document.getElementById('btn-vista-mapa').getAttribute('aria-pressed') === 'true' && state.zonaFiltro === 'Centro' && state.resultadosBuscar.length === 1`));
+  q(`document.getElementById('btn-vista-mapa').getAttribute('aria-pressed') === 'true' && state.zonaFiltro === 'Comuna 1 - Centro' && state.resultadosBuscar.length === 1`));
+evalCtx(`state.catFiltro='Plomería'; buscarDesdeZonaMapa('Comuna 1 - Centro');`);
+await esperar(120);
+comprobar('Elegir una zona del mapa abre Lista y conserva el oficio',
+  q(`state.vistaBuscar==='lista' && state.catFiltro==='Plomería' && state.zonaFiltro==='Comuna 1 - Centro'`));
+evalCtx(`state.miUbicacion=[4.4434102,-75.2411640];`);
+comprobar('La cercanía no inventa una distancia para un perfil sin coordenadas',
+  q(`distanciaProfesional({zona:'Centro',lat:null,lng:null}) === null && distanciaProfesional({lat:4.4434102,lng:-75.2411640}) === 0`));
+evalCtx(`state.miUbicacion=null;`);
 evalCtx(`document.getElementById('home-zone').value = ''; buscarDesdeHome();`);
 evalCtx(`nav('buscar')`);
 await esperar(120);
@@ -318,6 +336,10 @@ comprobar('El perfil muestra la insignia de identidad verificada', /Identidad/.t
 comprobar('El perfil muestra la galería de trabajos', q(`document.querySelectorAll('#perfil-content .galeria-item').length`) >= 1);
 comprobar('El perfil lista las reseñas con su respuesta', q(`document.querySelectorAll('#perfil-content .review').length`) === 2);
 comprobar('El perfil tiene mapa e indicador de zona', /Jordán/.test(q(`document.querySelector('#perfil-content .map-caption').textContent`)));
+comprobar('La tarifa está visible junto a la reserva en escritorio y móvil',
+  q(`document.querySelector('.profile-booking .profile-rate strong').textContent === document.querySelector('.perfil-cta-mobile .profile-rate strong').textContent`));
+comprobar('El mapa público de Centro usa la comuna declarada aunque el punto guardado sea de otra zona',
+  q(`zonaEnMapa({zona:'Centro', lat:4.4381302, lng:-75.1718938}).nombre === 'Comuna 1 - Centro' && zonaEnMapa({zona:'Sin definir', lat:4.4381302, lng:-75.1718938}) === null`));
 
 evalCtx(`irAAgendar('w-jardin')`);
 await esperar(300);
@@ -384,6 +406,12 @@ await esperar(60);
 comprobar('Se puede elegir un horario y queda marcado', q('state.horaSel') === horaElegida && q(`document.querySelectorAll('#slot-grid .slot.sel').length`) === 1,
   `horaSel=${q('state.horaSel')}`);
 comprobar('El horario elegido se anuncia como seleccionado', q(`document.querySelector('#slot-grid .slot.sel').getAttribute('aria-checked')`) === 'true');
+evalCtx(`document.getElementById('agendar-zona').value='Comuna 5 - Jordán'; document.getElementById('agendar-barrio').value='Jordán'; document.getElementById('agendar-direccion').value='Carrera 1 #2-03'; document.getElementById('agendar-referencia').value='Portón azul'; toggleMapaEditor('agendar'); confirmarPuntoEditor('agendar');`);
+comprobar('La reserva reúne zona, barrio, dirección, referencia y pin opcional',
+  q(`(()=>{ const lugar=leerEditorUbicacion('agendar'); return lugar.zona==='Comuna 5 - Jordán' && lugar.barrio==='Jordán' && lugar.direccion==='Carrera 1 #2-03' && lugar.referencia==='Portón azul' && lugar.pin.lat===4.441253; })()`));
+evalCtx(`quitarPinEditor('agendar'); prepararUbicacionCita();`);
+comprobar('El pin se puede quitar y la siguiente reserva empieza sin dirección',
+  q(`leerEditorUbicacion('agendar')?.pin == null && document.getElementById('agendar-direccion').value===''`));
 comprobar('El calendario es un grupo de radio para lectores de pantalla',
   q(`document.getElementById('cal-grid').getAttribute('role')`) === 'radiogroup'
   && q(`document.getElementById('slot-grid').getAttribute('role')`) === 'radiogroup');
@@ -517,6 +545,38 @@ comprobar('El tema claro se aplica al documento', q(`document.documentElement.ge
 // rutas: una vista inexistente no rompe la navegación
 evalCtx(`nav('no-existe')`);
 comprobar('Una vista desconocida no rompe la app', q(`typeof state === 'object'`));
+
+await evalCtx(`renderCuenta()`);
+evalCtx(`document.getElementById('hogar-zona').value='Comuna 5 - Jordán'; document.getElementById('hogar-barrio').value='Jordán'; document.getElementById('hogar-direccion').value='Carrera 1 #2-03'; document.getElementById('hogar-referencia').value='Portón azul';
+  navigator.geolocation={getCurrentPosition:ok=>ok({coords:{latitude:4.4435,longitude:-75.2412,accuracy:120}})};
+  usarGPSUbicacion('hogar', {disabled:false});`);
+comprobar('El GPS centra el mapa sin confirmar el pin automáticamente',
+  q(`editoresUbicacion.hogar.mapa.getCenter().lat===4.4435 && leerEditorUbicacion('hogar').pin===null
+    && document.getElementById('hogar-pin-estado').textContent.includes('aproximada')`));
+evalCtx(`editoresUbicacion.hogar.mapa.panTo({lat:4.4434102,lng:-75.241164}); confirmarPuntoEditor('hogar');`);
+comprobar('Confirmar usa el centro ajustado y cancelar conserva el punto anterior',
+  q(`(()=>{toggleMapaEditor('hogar'); editoresUbicacion.hogar.mapa.panTo({lat:4.45,lng:-75.25}); cerrarMapaEditor('hogar'); return leerEditorUbicacion('hogar').pin.lat===4.44341 && document.getElementById('hogar-pin-panel').classList.contains('hidden');})()`));
+evalCtx(`delete navigator.geolocation;`);
+await evalCtx(`guardarUbicacionHogar(document.querySelector('.cuenta-hogar .btn-primary'))`);
+const hogarGuardado = escrituras.findLast(({tabla, accion, fila})=>tabla==='profiles' && accion==='update' && fila.ubicacion_hogar)?.fila.ubicacion_hogar;
+comprobar('Mi hogar se guarda en la cuenta con dirección y pin',
+  hogarGuardado?.direccion==='Carrera 1 #2-03' && hogarGuardado.pin?.lat===4.44341);
+await evalCtx(`irAAgendar('w-jardin')`);
+comprobar('La cita ofrece cargar el hogar sin compartirlo por defecto',
+  q(`!!document.querySelector('.usar-hogar') && document.getElementById('agendar-direccion').value==='' && !leerEditorUbicacion('agendar')?.pin`));
+evalCtx(`usarHogarEnCita(); document.getElementById('agendar-direccion').value='Otra dirección'; quitarPinEditor('agendar');`);
+comprobar('Editar el domicilio de una cita no modifica el hogar guardado',
+  q(`currentUser().ubicacion_hogar.direccion==='Carrera 1 #2-03' && !!currentUser().ubicacion_hogar.pin && !leerEditorUbicacion('agendar').pin`));
+evalCtx(`usarHogarEnCita(); document.querySelector('#slot-grid .slot[role="radio"]').click();`);
+await evalCtx(`confirmarCita()`);
+const citaGuardada = escrituras.findLast(({tabla, accion})=>tabla==='citas' && accion==='insert')?.fila;
+comprobar('Confirmar guarda la ubicación en la cita y conserva la dirección de referencia',
+  citaGuardada?.ubicacion_servicio?.pin?.lat===4.44341 && citaGuardada.ubicacion_servicio.barrio==='Jordán'
+    && citaGuardada.direccion_referencia.includes('Carrera 1 #2-03'));
+comprobar('La navegación toma el pin exacto en citas aceptadas y no aparece en solicitudes pendientes',
+  q(`(()=>{const cita = {estado:'aceptada', ubicacion_servicio:currentUser().ubicacion_hogar}; const aceptada=ubicacionCitaHTML(cita,true); cita.estado='pendiente'; return aceptada.includes('destination=4.44341%2C-75.241164') && aceptada.includes('dir_action=navigate') && !ubicacionCitaHTML(cita,true).includes('Google Maps');})()`));
+comprobar('Una dirección escrita funciona como destino cuando la cita no tiene pin',
+  q(`rutaCitaURL({ubicacion_servicio:{direccion:'Carrera 1 #2-03',barrio:'Jordán'}}).includes('Carrera%201%20%232-03') && rutaCitaURL({ubicacion_servicio:{zona:'Centro'}})===''`));
 
 console.log(`\n${fallos.length ? `${fallos.length} comprobación(es) fallaron:\n- ${fallos.join('\n- ')}` : 'Todas las comprobaciones pasaron.'}`);
 process.exit(fallos.length ? 1 : 0);

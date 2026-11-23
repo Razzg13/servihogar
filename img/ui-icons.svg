@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="eye" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.7 6.1A11 11 0 0 1 12 6c6 0 9.5 6 9.5 6a15 15 0 0 1-2 2.7m-3 2.3a10 10 0 0 1-4.5 1c-6 0-9.5-6-9.5-6a16 16 0 0 1 3.6-3.9"/></symbol>
+  <symbol id="location" viewBox="0 0 24 24"><path d="M12 21s-7-7-7-12a7 7 0 1 1 14 0c0 5-7 12-7 12Z"/><circle cx="12" cy="9" r="2.3"/></symbol>
+  <symbol id="calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="chat" viewBox="0 0 24 24"><path d="M20 15a2 2 0 0 1-2 2H9l-5 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2ZM8 9h8m-8 4h5"/></symbol>
+  <symbol id="car" viewBox="0 0 24 24"><path d="m5 10 1.6-4.2A1.3 1.3 0 0 1 7.8 5h8.4a1.3 1.3 0 0 1 1.2.8L19 10M4 17v2m16-2v2M7 13h1m8 0h1"/><rect x="3" y="10" width="18" height="7" rx="2"/></symbol>
+  <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4"/></symbol>
+  <symbol id="bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9m-8 12a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="bell-add" viewBox="0 0 24 24"><path d="M13 2a6 6 0 0 0-7 6c0 7-2 7-2 9h16c0-1.4-1.2-1.8-1.7-5m-8.3 8a2 2 0 0 0 4 0m4-18v6m-3-3h6"/></symbol>
+  <symbol id="heart" viewBox="0 0 24 24"><path d="M20.5 5.8a4.7 4.7 0 0 0-6.6 0L12 7.7l-1.9-1.9a4.7 4.7 0 0 0-6.6 6.6l8.5 8.1 8.5-8.1a4.7 4.7 0 0 0 0-6.6Z"/></symbol>
+  <symbol id="shield" viewBox="0 0 24 24"><path d="m12 3 7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3Zm-3 9 2 2 4-4"/></symbol>
+  <symbol id="link" viewBox="0 0 24 24"><path d="m10 7 2-2a4.2 4.2 0 1 1 6 6l-2 2M8 11l-2 2a4.2 4.2 0 1 0 6 6l2-2m-5-2 6-6"/></symbol>
+  <symbol id="file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Zm8 0v5h4M9 12h6m-6 4h6"/></symbol>
+  <symbol id="card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="warning" viewBox="0 0 24 24"><path d="m12 3 10 17H2L12 3Zm0 6v5m0 3h.01"/></symbol>
+  <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-3-5.5 3 1-6.2L3 9.6l6.2-.9L12 3Z"/></symbol>
+  <symbol id="award" viewBox="0 0 24 24"><circle cx="12" cy="9" r="5"/><path d="m9 13-2 8 5-2 5 2-2-8"/></symbol>
+  <symbol id="trend" viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8m-6 0h6v6"/></symbol>
+</svg>
